@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Municipal AI Gateway — Admin Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.7/chart.umd.min.js"></script>
+<style>
+  :root {
+    --navy: #1B2A4A;
+    --navy-light: #2C3E6B;
+    --gold: #C8A951;
+    --gold-light: #E8D599;
+    --bg: #F4F5F7;
+    --card: #FFFFFF;
+    --text: #1B2A4A;
+    --text-muted: #6B7280;
+    --border: #E5E7EB;
+    --green: #059669;
+    --red: #DC2626;
+    --orange: #D97706;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+  }
+
+  /* ── Header ─────────────────────────────────── */
+  header {
+    background: var(--navy);
+    color: white;
+    padding: 0;
+  }
+  .header-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  .header-main h1 { font-size: 1.4rem; font-weight: 600; letter-spacing: 0.02em; }
+  .header-main h1 span { color: var(--gold); }
+  .header-status { font-size: 0.85rem; color: var(--gold-light); }
+  .gold-bar { height: 4px; background: linear-gradient(90deg, var(--gold), var(--gold-light), var(--gold)); }
+
+  /* ── Login overlay ──────────────────────────── */
+  #login-overlay {
+    position: fixed; inset: 0;
+    background: var(--navy);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000;
+  }
+  .login-box {
+    background: var(--card);
+    border-radius: 8px;
+    padding: 2.5rem;
+    width: 380px;
+    text-align: center;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+  }
+  .login-box h2 { color: var(--navy); margin-bottom: 0.5rem; font-size: 1.2rem; }
+  .login-box p { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1.5rem; }
+  .login-box input {
+    width: 100%; padding: 0.7rem 1rem;
+    border: 1px solid var(--border); border-radius: 6px;
+    font-size: 0.9rem; margin-bottom: 1rem;
+  }
+  .login-box input:focus { outline: none; border-color: var(--gold); }
+
+  /* ── Layout ─────────────────────────────────── */
+  .container { max-width: 1400px; margin: 0 auto; padding: 1.5rem 2rem; }
+
+  /* ── Buttons ────────────────────────────────── */
+  .btn {
+    display: inline-block;
+    padding: 0.6rem 1.2rem;
+    border: none; border-radius: 6px;
+    font-size: 0.85rem; font-weight: 500;
+    cursor: pointer; transition: opacity 0.15s;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn-navy { background: var(--navy); color: white; }
+  .btn-gold { background: var(--gold); color: var(--navy); }
+  .btn-sm { padding: 0.4rem 0.8rem; font-size: 0.8rem; }
+
+  /* ── Stats row ──────────────────────────────── */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .stat-card {
+    background: var(--card);
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    border-left: 4px solid var(--gold);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .stat-card .label { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .stat-card .value { font-size: 2rem; font-weight: 700; color: var(--navy); margin: 0.25rem 0; }
+  .stat-card .sub { font-size: 0.8rem; color: var(--text-muted); }
+  .stat-card.ok .value { color: var(--green); }
+  .stat-card.tampered .value { color: var(--red); }
+
+  /* ── Panels ─────────────────────────────────── */
+  .panel {
+    background: var(--card);
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+  }
+  .panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-header h2 { font-size: 1rem; font-weight: 600; }
+  .panel-body { padding: 1.5rem; }
+
+  /* ── Table ──────────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th { text-align: left; padding: 0.6rem 1rem; color: var(--text-muted); font-weight: 500; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 2px solid var(--border); }
+  td { padding: 0.65rem 1rem; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #F9FAFB; }
+
+  .badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+  .badge-clean { background: #D1FAE5; color: #065F46; }
+  .badge-scrubbed { background: #FEF3C7; color: #92400E; }
+
+  .pii-tags { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+  .pii-tag {
+    display: inline-block;
+    padding: 0.1rem 0.4rem;
+    background: var(--navy);
+    color: white;
+    border-radius: 3px;
+    font-size: 0.7rem;
+  }
+
+  /* ── Two-column layout ──────────────────────── */
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+  }
+  @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  /* ── Quick actions ──────────────────────────── */
+  .action-group { margin-bottom: 1.25rem; }
+  .action-group label { display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  .action-group input {
+    width: 100%; padding: 0.6rem 0.8rem;
+    border: 1px solid var(--border); border-radius: 6px;
+    font-size: 0.85rem; margin-bottom: 0.5rem;
+  }
+  .action-group input:focus { outline: none; border-color: var(--gold); }
+
+  .result-box {
+    background: #F0FDF4;
+    border: 1px solid #BBF7D0;
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    font-size: 0.8rem;
+    font-family: monospace;
+    word-break: break-all;
+    display: none;
+    margin-top: 0.5rem;
+  }
+  .result-box.error { background: #FEF2F2; border-color: #FECACA; color: var(--red); }
+  .result-box.visible { display: block; }
+
+  .empty-state { text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.9rem; }
+
+  /* ── Chart ──────────────────────────────────── */
+  .chart-wrap { position: relative; height: 280px; }
+
+  /* ── Footer ─────────────────────────────────── */
+  .site-footer {
+    text-align: center;
+    padding: 1.5rem 2rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+  .site-footer a {
+    color: var(--gold);
+    text-decoration: none;
+    font-weight: 500;
+  }
+  .site-footer a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<!-- ── Login ────────────────────────────────────── -->
+<div id="login-overlay">
+  <div class="login-box">
+    <div style="margin-bottom:1rem;text-align:center">
+      <img src="assets/logo.png" alt="LUMINARYX" style="height: 32px;">
+    </div>
+    <h2>Municipal AI Gateway</h2>
+    <p>Enter your gateway URL and admin secret to continue.</p>
+    <input type="text" id="login-url" placeholder="Gateway URL (e.g. http://localhost:8080)" value="http://localhost:8080">
+    <input type="password" id="login-secret" placeholder="Admin secret (GATEWAY_SECRET)">
+    <button class="btn btn-navy" style="width:100%" onclick="doLogin()">Connect</button>
+    <div id="login-error" class="result-box error" style="margin-top:1rem"></div>
+  </div>
+  <div style="position:absolute;bottom:1.5rem;width:100%;text-align:center;font-size:0.8rem;color:rgba(255,255,255,0.5)">
+    Powered by <a href="https://luminaryx.ca" target="_blank" rel="noopener" style="color:var(--gold-light);text-decoration:none">LUMINARYX</a>
+  </div>
+</div>
+
+<!-- ── Header ───────────────────────────────────── -->
+<header>
+  <div class="header-main">
+    <h1><span>Municipal</span> AI Gateway</h1>
+    <div style="display:flex;align-items:center;gap:1rem">
+      <span class="header-status">Admin Dashboard &mdash; <span id="header-time"></span></span>
+      <button class="btn btn-sm" style="background:rgba(255,255,255,0.15);color:var(--gold-light);border:1px solid rgba(200,169,81,0.3)" onclick="doLogout()">Log out</button>
+    </div>
+  </div>
+  <div class="gold-bar"></div>
+</header>
+
+<!-- ── Main content ─────────────────────────────── -->
+<div class="container">
+
+  <!-- Stats row -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="label">Requests Today</div>
+      <div class="value" id="stat-requests">—</div>
+      <div class="sub" id="stat-requests-sub">loading...</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">PII Detections Prevented</div>
+      <div class="value" id="stat-pii">—</div>
+      <div class="sub" id="stat-pii-sub">today</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Active Staff Keys</div>
+      <div class="value" id="stat-keys">—</div>
+      <div class="sub" id="stat-keys-sub">loading...</div>
+    </div>
+    <div class="stat-card" id="stat-chain-card">
+      <div class="label">Audit Chain</div>
+      <div class="value" id="stat-chain">—</div>
+      <div class="sub" id="stat-chain-sub">verifying...</div>
+    </div>
+  </div>
+
+  <!-- Recent requests table -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Recent Requests</h2>
+      <button class="btn btn-sm btn-navy" onclick="loadRequests()">Refresh</button>
+    </div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Department</th>
+            <th>Provider</th>
+            <th>PII Types Found</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="requests-tbody">
+          <tr><td colspan="5" class="empty-state">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Chart + Quick Actions -->
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-header">
+        <h2>PII Detection Breakdown</h2>
+      </div>
+      <div class="panel-body">
+        <div class="chart-wrap">
+          <canvas id="pii-chart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Quick Actions</h2>
+      </div>
+      <div class="panel-body">
+        <!-- Create key -->
+        <div class="action-group">
+          <label>Create Staff Key</label>
+          <input type="text" id="new-key-dept" placeholder="Department name (e.g. Planning)">
+          <input type="text" id="new-key-desc" placeholder="Description (e.g. Jane Doe)">
+          <button class="btn btn-gold" onclick="createKey()">Generate Key</button>
+          <div id="new-key-result" class="result-box"></div>
+        </div>
+
+        <hr style="border:none;border-top:1px solid var(--border);margin:1.25rem 0">
+
+        <!-- Verify chain -->
+        <div class="action-group">
+          <label>Audit Chain Verification</label>
+          <button class="btn btn-navy" onclick="verifyChain()">Verify Entire Chain</button>
+          <div id="verify-result" class="result-box"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer class="site-footer">
+  Powered by <a href="https://luminaryx.ca" target="_blank" rel="noopener">LUMINARYX</a>
+</footer>
+
+<script>
+let API_URL = '';
+let API_SECRET = '';
+let piiChart = null;
+
+function headers() {
+  return { 'Authorization': 'Bearer ' + API_SECRET, 'Content-Type': 'application/json' };
+}
+
+function doLogout() {
+  API_URL = '';
+  API_SECRET = '';
+  document.getElementById('login-secret').value = '';
+  document.getElementById('login-overlay').style.display = 'flex';
+}
+
+async function doLogin() {
+  API_URL = document.getElementById('login-url').value.replace(/\/+$/, '');
+  API_SECRET = document.getElementById('login-secret').value;
+  const errEl = document.getElementById('login-error');
+  errEl.classList.remove('visible');
+
+  try {
+    const r = await fetch(API_URL + '/health');
+    if (!r.ok) throw new Error('Cannot reach gateway');
+
+    const kr = await fetch(API_URL + '/admin/keys', { headers: headers() });
+    if (kr.status === 401) {
+      errEl.textContent = 'Invalid admin secret.';
+      errEl.classList.add('visible');
+      return;
+    }
+
+    document.getElementById('login-overlay').style.display = 'none';
+    loadAll();
+  } catch (e) {
+    errEl.textContent = 'Cannot connect: ' + e.message;
+    errEl.classList.add('visible');
+  }
+}
+
+function loadAll() {
+  loadRequests();
+  loadKeys();
+  loadChainStatus();
+  updateClock();
+  setInterval(updateClock, 1000);
+}
+
+function updateClock() {
+  document.getElementById('header-time').textContent = new Date().toLocaleTimeString();
+}
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// ── Requests ──────────────────────────────────────
+
+async function loadRequests() {
+  try {
+    const r = await fetch(API_URL + '/admin/requests', { headers: headers() });
+    const data = await r.json();
+    renderRequests(data);
+    computeStats(data);
+    computePiiChart(data);
+  } catch (e) {
+    document.getElementById('requests-tbody').innerHTML =
+      '<tr><td colspan="5" class="empty-state">Error loading requests</td></tr>';
+  }
+}
+
+function renderRequests(data) {
+  const tbody = document.getElementById('requests-tbody');
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No requests yet. Proxy some AI traffic to see data here.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.slice(0, 20).map(r => {
+    const ts = r.timestamp ? new Date(r.timestamp).toLocaleString() : '—';
+    const dept = r.department || '—';
+    const provider = r.provider || '—';
+    const piiTotal = (r.pii_detections_request || 0) + (r.pii_detections_response || 0);
+    const piiTypes = r.pii_types_found ? r.pii_types_found.split(',') : [];
+    const status = piiTotal > 0
+      ? '<span class="badge badge-scrubbed">Scrubbed (' + piiTotal + ')</span>'
+      : '<span class="badge badge-clean">Clean</span>';
+    const tags = piiTypes.length
+      ? '<div class="pii-tags">' + piiTypes.map(t => '<span class="pii-tag">' + formatPiiType(t) + '</span>').join('') + '</div>'
+      : '<span style="color:var(--text-muted);font-size:0.8rem">None</span>';
+    return '<tr><td>' + ts + '</td><td>' + dept + '</td><td style="text-transform:capitalize">' + provider + '</td><td>' + tags + '</td><td>' + status + '</td></tr>';
+  }).join('');
+}
+
+function formatPiiType(t) {
+  const map = {
+    'CA_SIN': 'SIN', 'CA_BC_PHN': 'BC PHN', 'CA_AB_PHN': 'AB PHN',
+    'CA_ON_OHIP': 'OHIP', 'CA_QC_RAMQ': 'RAMQ', 'CA_POSTAL_CODE': 'Postal',
+    'CA_PHONE_NUMBER': 'Phone', 'CA_ADDRESS': 'Address', 'CA_PID': 'PID',
+    'CA_FOLIO': 'Folio', 'CA_CASE_NUMBER': 'Case #',
+    'EMAIL_ADDRESS': 'Email', 'PERSON': 'Name', 'LOCATION': 'Location',
+  };
+  return map[t] || t;
+}
+
+function computeStats(data) {
+  const today = todayISO();
+  const todayReqs = data.filter(r => r.timestamp && r.timestamp.startsWith(today));
+  const totalPii = todayReqs.reduce((s, r) => s + (r.pii_detections_request || 0) + (r.pii_detections_response || 0), 0);
+
+  document.getElementById('stat-requests').textContent = todayReqs.length;
+  document.getElementById('stat-requests-sub').textContent = data.length + ' total in recent history';
+  document.getElementById('stat-pii').textContent = totalPii;
+  document.getElementById('stat-pii-sub').textContent = 'today';
+}
+
+// ── PII Chart ─────────────────────────────────────
+
+function computePiiChart(data) {
+  const counts = {};
+  data.forEach(r => {
+    if (r.pii_types_found) {
+      r.pii_types_found.split(',').forEach(t => {
+        const label = formatPiiType(t.trim());
+        counts[label] = (counts[label] || 0) + (r.pii_detections_request || 0) + (r.pii_detections_response || 0);
+      });
+    }
+  });
+
+  // Always show these categories even if zero
+  const categories = ['SIN', 'BC PHN', 'Address', 'Email', 'Phone', 'Postal', 'PID', 'Folio', 'Case #', 'Name'];
+  const labels = categories;
+  const values = categories.map(c => counts[c] || 0);
+
+  const ctx = document.getElementById('pii-chart').getContext('2d');
+  if (piiChart) piiChart.destroy();
+  piiChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Detections',
+        data: values,
+        backgroundColor: '#1B2A4A',
+        borderRadius: 4,
+        maxBarThickness: 40,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+      },
+      scales: {
+        y: { beginAtZero: true, ticks: { precision: 0 } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+// ── Keys ──────────────────────────────────────────
+
+async function loadKeys() {
+  try {
+    const r = await fetch(API_URL + '/admin/keys', { headers: headers() });
+    const data = await r.json();
+    const active = data.filter(k => k.active).length;
+    document.getElementById('stat-keys').textContent = active;
+    document.getElementById('stat-keys-sub').textContent = data.length + ' total, ' + (data.length - active) + ' deactivated';
+  } catch (e) {
+    document.getElementById('stat-keys').textContent = '?';
+  }
+}
+
+async function createKey() {
+  const dept = document.getElementById('new-key-dept').value.trim();
+  const desc = document.getElementById('new-key-desc').value.trim();
+  const resultEl = document.getElementById('new-key-result');
+  resultEl.classList.remove('visible', 'error');
+
+  if (!dept) {
+    resultEl.textContent = 'Department name is required.';
+    resultEl.classList.add('visible', 'error');
+    return;
+  }
+
+  try {
+    const r = await fetch(API_URL + '/admin/keys', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ department: dept, description: desc }),
+    });
+    const data = await r.json();
+    if (r.ok) {
+      resultEl.textContent = 'Key created for ' + dept + ':\n' + data.key;
+      resultEl.classList.add('visible');
+      resultEl.classList.remove('error');
+      document.getElementById('new-key-dept').value = '';
+      document.getElementById('new-key-desc').value = '';
+      loadKeys();
+    } else {
+      resultEl.textContent = data.detail || 'Error creating key';
+      resultEl.classList.add('visible', 'error');
+    }
+  } catch (e) {
+    resultEl.textContent = 'Network error: ' + e.message;
+    resultEl.classList.add('visible', 'error');
+  }
+}
+
+// ── Audit Chain ───────────────────────────────────
+
+async function loadChainStatus() {
+  const card = document.getElementById('stat-chain-card');
+  try {
+    const r = await fetch(API_URL + '/audit/verify');
+    const data = await r.json();
+    if (data.status === 'ok') {
+      document.getElementById('stat-chain').textContent = 'OK';
+      document.getElementById('stat-chain-sub').textContent = data.entries_checked + ' entries verified';
+      card.classList.add('ok');
+      card.classList.remove('tampered');
+    } else {
+      document.getElementById('stat-chain').textContent = 'TAMPERED';
+      document.getElementById('stat-chain-sub').textContent = 'Entry #' + data.entry_id;
+      card.classList.add('tampered');
+      card.classList.remove('ok');
+    }
+  } catch (e) {
+    document.getElementById('stat-chain').textContent = '?';
+    document.getElementById('stat-chain-sub').textContent = 'error';
+  }
+}
+
+async function verifyChain() {
+  const resultEl = document.getElementById('verify-result');
+  resultEl.classList.remove('visible', 'error');
+  resultEl.textContent = 'Verifying...';
+  resultEl.classList.add('visible');
+
+  try {
+    const r = await fetch(API_URL + '/audit/verify');
+    const data = await r.json();
+    if (data.status === 'ok') {
+      resultEl.textContent = 'Chain intact. ' + data.entries_checked + ' entries verified.';
+      resultEl.classList.remove('error');
+    } else {
+      resultEl.textContent = 'TAMPERED: ' + data.message;
+      resultEl.classList.add('error');
+    }
+    loadChainStatus();
+  } catch (e) {
+    resultEl.textContent = 'Error: ' + e.message;
+    resultEl.classList.add('error');
+  }
+}
+
+// ── Allow Enter key to submit login ───────────────
+document.getElementById('login-secret').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+</script>
+</body>
+</html>

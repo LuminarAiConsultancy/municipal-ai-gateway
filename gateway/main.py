@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, create_engine
 from sqlalchemy.orm import Session
 
@@ -231,6 +232,13 @@ app = FastAPI(
     title="Municipal AI Gateway",
     version="0.1.0",
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=r".*",
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -498,3 +506,34 @@ async def deactivate_key(key_id: int, request: Request):
         api_key.active = False
         session.commit()
     return {"id": key_id, "active": False, "message": "Key deactivated."}
+
+
+@app.get("/admin/requests")
+async def list_requests(request: Request):
+    """Return the last 50 proxy requests with PII detection summary."""
+    _require_admin(request)
+    with Session(app.state.engine) as session:
+        logs = (
+            session.query(RequestLog)
+            .order_by(RequestLog.id.desc())
+            .limit(50)
+            .all()
+        )
+        return [
+            {
+                "id": r.id,
+                "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+                "provider": r.provider,
+                "method": r.method,
+                "path": r.path,
+                "response_status": r.response_status,
+                "source_ip": r.source_ip,
+                "duration_ms": r.duration_ms,
+                "pii_detections_request": r.pii_detections_request or 0,
+                "pii_detections_response": r.pii_detections_response or 0,
+                "pii_types_found": r.pii_types_found,
+                "department": r.department,
+                "staff_key_id": r.staff_key_id,
+            }
+            for r in logs
+        ]
