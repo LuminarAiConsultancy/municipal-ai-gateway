@@ -212,6 +212,45 @@ class CanadianPostalCodeRecognizer(PatternRecognizer):
         )
 
 
+_STREET_SUFFIXES = (
+    r"Street|St|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Road|Rd|"
+    r"Crescent|Cres|Court|Ct|Lane|Ln|Way|Place|Pl|Trail"
+)
+
+# Canadian province abbreviations and full names for optional city+province tail.
+_PROVINCES = (
+    r"BC|AB|SK|MB|ON|QC|NB|NS|PE|NL|NT|YT|NU|"
+    r"British\s+Columbia|Alberta|Saskatchewan|Manitoba|Ontario|"
+    r"Quebec|Québec|New\s+Brunswick|Nova\s+Scotia|"
+    r"Prince\s+Edward\s+Island|Newfoundland(?:\s+and\s+Labrador)?"
+)
+
+
+class CanadianAddressRecognizer(PatternRecognizer):
+    """Canadian street addresses: 123 Main Street, optionally followed by city and province."""
+
+    def __init__(self):
+        # Full address with city + province: 456 Oak Street Vancouver BC
+        full = (
+            r"\b\d{1,6}\s+(?:[A-Z][a-z]+\s+){1,3}"
+            rf"(?:{_STREET_SUFFIXES})\.?"
+            rf"(?:,?\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*,?\s+(?:{_PROVINCES}))?"
+            r"\b"
+        )
+        patterns = [
+            Pattern("CA_ADDRESS_FULL", full, 0.7),
+        ]
+        super().__init__(
+            supported_entity="CA_ADDRESS",
+            supported_language="en",
+            patterns=patterns,
+            context=[
+                "address", "live", "reside", "located", "mail",
+                "ship", "deliver", "home", "office", "work",
+            ],
+        )
+
+
 class CanadianPhoneRecognizer(PatternRecognizer):
     """Canadian phone numbers in common formats."""
 
@@ -251,6 +290,7 @@ PLACEHOLDER_MAP = {
     "CA_QC_RAMQ": "[RAMQ REMOVED]",
     "CA_POSTAL_CODE": "[POSTAL CODE REMOVED]",
     "CA_PHONE_NUMBER": "[PHONE REMOVED]",
+    "CA_ADDRESS": "[ADDRESS REMOVED]",
     "EMAIL_ADDRESS": "[EMAIL REMOVED]",
     "PERSON": "[NAME REMOVED]",
     "LOCATION": "[ADDRESS REMOVED]",
@@ -291,6 +331,7 @@ class Scrubber:
         self._analyzer.registry.add_recognizer(OntarioHealthRecognizer())
         self._analyzer.registry.add_recognizer(QuebecHealthRecognizer())
         self._analyzer.registry.add_recognizer(CanadianPostalCodeRecognizer())
+        self._analyzer.registry.add_recognizer(CanadianAddressRecognizer())
         self._analyzer.registry.add_recognizer(CanadianPhoneRecognizer())
 
         self._anonymizer = AnonymizerEngine()
@@ -305,6 +346,7 @@ class Scrubber:
             "CA_QC_RAMQ",
             "CA_POSTAL_CODE",
             "CA_PHONE_NUMBER",
+            "CA_ADDRESS",
             # Presidio built-ins
             "EMAIL_ADDRESS",
             "PERSON",
