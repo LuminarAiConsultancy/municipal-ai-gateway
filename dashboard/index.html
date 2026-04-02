@@ -256,6 +256,11 @@
       <div class="value" id="stat-keys">—</div>
       <div class="sub" id="stat-keys-sub">loading...</div>
     </div>
+    <div class="stat-card">
+      <div class="label">Monthly Spend</div>
+      <div class="value" id="stat-spend">—</div>
+      <div class="sub" id="stat-spend-sub">this month</div>
+    </div>
     <div class="stat-card" id="stat-chain-card">
       <div class="label">Audit Chain</div>
       <div class="value" id="stat-chain">—</div>
@@ -276,12 +281,15 @@
             <th>Timestamp</th>
             <th>Department</th>
             <th>Provider</th>
+            <th>Model</th>
+            <th>Tokens</th>
+            <th>Cost</th>
             <th>PII Types Found</th>
             <th>Status</th>
           </tr>
         </thead>
         <tbody id="requests-tbody">
-          <tr><td colspan="5" class="empty-state">Loading...</td></tr>
+          <tr><td colspan="8" class="empty-state">Loading...</td></tr>
         </tbody>
       </table>
     </div>
@@ -314,7 +322,7 @@
     </div>
   </div>
 
-  <!-- Chart + Quick Actions -->
+  <!-- Charts -->
   <div class="grid-2">
     <div class="panel">
       <div class="panel-header">
@@ -327,6 +335,20 @@
       </div>
     </div>
 
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Spend by Department</h2>
+      </div>
+      <div class="panel-body">
+        <div class="chart-wrap">
+          <canvas id="spend-chart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Actions -->
+  <div class="grid-2">
     <div class="panel">
       <div class="panel-header">
         <h2>Quick Actions</h2>
@@ -363,6 +385,7 @@
 let API_URL = '';
 let API_SECRET = '';
 let piiChart = null;
+let spendChart = null;
 
 function headers() {
   return { 'Authorization': 'Bearer ' + API_SECRET, 'Content-Type': 'application/json' };
@@ -425,22 +448,28 @@ async function loadRequests() {
     renderRequests(data);
     computeStats(data);
     computePiiChart(data);
+    computeSpendChart(data);
   } catch (e) {
     document.getElementById('requests-tbody').innerHTML =
-      '<tr><td colspan="5" class="empty-state">Error loading requests</td></tr>';
+      '<tr><td colspan="8" class="empty-state">Error loading requests</td></tr>';
   }
 }
 
 function renderRequests(data) {
   const tbody = document.getElementById('requests-tbody');
   if (!data.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No requests yet. Proxy some AI traffic to see data here.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No requests yet. Proxy some AI traffic to see data here.</td></tr>';
     return;
   }
   tbody.innerHTML = data.slice(0, 20).map(r => {
     const ts = r.timestamp ? new Date(r.timestamp).toLocaleString() : '—';
     const dept = r.department || '—';
     const provider = r.provider || '—';
+    const model = r.model || '—';
+    const tokens = (r.input_tokens || 0) + (r.output_tokens || 0);
+    const tokenStr = tokens > 0 ? tokens.toLocaleString() : '—';
+    const costCents = r.estimated_cost_cents || 0;
+    const costStr = costCents > 0 ? '$' + (costCents / 100).toFixed(2) : '—';
     const piiTotal = (r.pii_detections_request || 0) + (r.pii_detections_response || 0);
     const piiTypes = r.pii_types_found ? r.pii_types_found.split(',') : [];
     const status = piiTotal > 0
@@ -449,7 +478,7 @@ function renderRequests(data) {
     const tags = piiTypes.length
       ? '<div class="pii-tags">' + piiTypes.map(t => '<span class="pii-tag">' + formatPiiType(t) + '</span>').join('') + '</div>'
       : '<span style="color:var(--text-muted);font-size:0.8rem">None</span>';
-    return '<tr><td>' + ts + '</td><td>' + dept + '</td><td style="text-transform:capitalize">' + provider + '</td><td>' + tags + '</td><td>' + status + '</td></tr>';
+    return '<tr><td>' + ts + '</td><td>' + dept + '</td><td style="text-transform:capitalize">' + provider + '</td><td style="font-size:0.8rem">' + model + '</td><td style="text-align:right">' + tokenStr + '</td><td style="text-align:right">' + costStr + '</td><td>' + tags + '</td><td>' + status + '</td></tr>';
   }).join('');
 }
 
@@ -466,13 +495,18 @@ function formatPiiType(t) {
 
 function computeStats(data) {
   const today = todayISO();
+  const thisMonth = today.slice(0, 7); // YYYY-MM
   const todayReqs = data.filter(r => r.timestamp && r.timestamp.startsWith(today));
+  const monthReqs = data.filter(r => r.timestamp && r.timestamp.startsWith(thisMonth));
   const totalPii = todayReqs.reduce((s, r) => s + (r.pii_detections_request || 0) + (r.pii_detections_response || 0), 0);
+  const monthCents = monthReqs.reduce((s, r) => s + (r.estimated_cost_cents || 0), 0);
 
   document.getElementById('stat-requests').textContent = todayReqs.length;
   document.getElementById('stat-requests-sub').textContent = data.length + ' total in recent history';
   document.getElementById('stat-pii').textContent = totalPii;
   document.getElementById('stat-pii-sub').textContent = 'today';
+  document.getElementById('stat-spend').textContent = '$' + (monthCents / 100).toFixed(2);
+  document.getElementById('stat-spend-sub').textContent = monthReqs.length + ' requests this month';
 }
 
 // ── PII Chart ─────────────────────────────────────
@@ -516,6 +550,57 @@ function computePiiChart(data) {
       scales: {
         y: { beginAtZero: true, ticks: { precision: 0 } },
         x: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+// ── Spend Chart ──────────────────────────────────────
+
+function computeSpendChart(data) {
+  const deptCosts = {};
+  const thisMonth = todayISO().slice(0, 7);
+  data.forEach(r => {
+    if (r.timestamp && r.timestamp.startsWith(thisMonth) && r.estimated_cost_cents > 0) {
+      const dept = r.department || 'Unknown';
+      deptCosts[dept] = (deptCosts[dept] || 0) + r.estimated_cost_cents;
+    }
+  });
+
+  const labels = Object.keys(deptCosts).sort();
+  const values = labels.map(d => deptCosts[d] / 100); // dollars
+
+  const ctx = document.getElementById('spend-chart').getContext('2d');
+  if (spendChart) spendChart.destroy();
+
+  if (!labels.length) {
+    ctx.font = '14px -apple-system, sans-serif';
+    ctx.fillStyle = '#6B7280';
+    ctx.textAlign = 'center';
+    ctx.fillText('No cost data yet', ctx.canvas.width / 2, 140);
+    return;
+  }
+
+  const colors = ['#1B2A4A', '#C8A951', '#2C3E6B', '#E8D599', '#059669', '#D97706', '#DC2626'];
+  spendChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: values,
+        backgroundColor: labels.map((_, i) => colors[i % colors.length]),
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { padding: 16, font: { size: 12 } } },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) { return ctx.label + ': $' + ctx.parsed.toFixed(2); }
+          }
+        }
       }
     }
   });
