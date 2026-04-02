@@ -103,6 +103,18 @@ See [docs/BLUEPRINT.md](docs/BLUEPRINT.md) for the full product specification, c
 
 ---
 
+## Ready for full AI governance?
+
+The gateway handles the **technical layer** -- what staff are sending and what PII was detected.
+
+[LUMINARYX](https://luminaryx.ca) handles the **governance layer** -- documented decision approvals, regulatory framework mapping, board-ready compliance reports, and a defensible audit trail for your CAO and council.
+
+Together they answer every question a privacy commissioner will ask.
+
+**Learn more: [luminaryx.ca](https://luminaryx.ca)**
+
+---
+
 ## License
 
 MIT -- free to use, deploy, and modify. See [LICENSE](LICENSE).
