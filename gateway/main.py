@@ -4,6 +4,7 @@ Accepts incoming AI requests, forwards them to the correct provider,
 logs every request to PostgreSQL, and returns the response.
 """
 
+import json
 import os
 import hashlib
 import datetime as dt
@@ -14,6 +15,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response, HTTPException
 from sqlalchemy import Column, Integer, String, DateTime, Text, create_engine
 from sqlalchemy.orm import declarative_base, Session
+
+from scrubber import get_scrubber
 
 load_dotenv()
 
@@ -59,6 +62,9 @@ class RequestLog(Base):
     response_hash = Column(String(64))
     source_ip = Column(String(45))
     duration_ms = Column(Integer)
+    pii_detections_request = Column(Integer, default=0)
+    pii_detections_response = Column(Integer, default=0)
+    pii_types_found = Column(Text)  # comma-separated entity types
 
 
 def _init_db():
@@ -74,6 +80,31 @@ def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _scrub_payload(scrubber, payload, *, direction: str):
+    """Walk a JSON payload scrubbing string values. Returns (cleaned_payload, detections)."""
+    from scrubber import PiiDetection
+
+    detections: list[PiiDetection] = []
+
+    def _walk(obj):
+        if isinstance(obj, str):
+            result = (
+                scrubber.scrub_request(obj)
+                if direction == "request"
+                else scrubber.scrub_response(obj)
+            )
+            detections.extend(result.detections)
+            return result.text
+        if isinstance(obj, dict):
+            return {k: _walk(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [_walk(item) for item in obj]
+        return obj
+
+    cleaned = _walk(payload)
+    return cleaned, detections
+
+
 def _log_request(
     engine,
     *,
@@ -85,6 +116,9 @@ def _log_request(
     response_body: bytes,
     source_ip: str,
     duration_ms: int,
+    pii_detections_request: int = 0,
+    pii_detections_response: int = 0,
+    pii_types_found: str | None = None,
 ):
     with Session(engine) as session:
         session.add(
@@ -97,6 +131,9 @@ def _log_request(
                 response_hash=_sha256(response_body) if response_body else None,
                 source_ip=source_ip,
                 duration_ms=duration_ms,
+                pii_detections_request=pii_detections_request,
+                pii_detections_response=pii_detections_response,
+                pii_types_found=pii_types_found,
             )
         )
         session.commit()
@@ -108,6 +145,7 @@ def _log_request(
 async def lifespan(app: FastAPI):
     app.state.engine = _init_db()
     app.state.http_client = httpx.AsyncClient(timeout=120.0)
+    app.state.scrubber = get_scrubber()
     yield
     await app.state.http_client.aclose()
 
@@ -154,7 +192,21 @@ async def proxy(provider: str, path: str, request: Request):
 
     # Build the outbound request.
     target_url = f"{config['base_url']}/{path}"
-    body = await request.body()
+    raw_body = await request.body()
+
+    # ── Scrub PII from the outbound request body ──
+    scrubber = app.state.scrubber
+    req_detections = []
+    resp_detections = []
+
+    body = raw_body
+    if raw_body:
+        try:
+            payload = json.loads(raw_body)
+            payload, req_detections = _scrub_payload(scrubber, payload, direction="request")
+            body = json.dumps(payload).encode()
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            pass  # non-JSON body, forward as-is
 
     # Copy safe headers from the inbound request.
     headers = {}
@@ -191,6 +243,18 @@ async def proxy(provider: str, path: str, request: Request):
 
     response_body = upstream.content
 
+    # ── Scrub PII from the response body ──
+    if response_body:
+        try:
+            resp_payload = json.loads(response_body)
+            resp_payload, resp_detections = _scrub_payload(scrubber, resp_payload, direction="response")
+            response_body = json.dumps(resp_payload).encode()
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            pass
+
+    all_detections = req_detections + resp_detections
+    pii_types = sorted({d.entity_type for d in all_detections})
+
     # Log to PostgreSQL.
     _log_request(
         app.state.engine,
@@ -202,9 +266,12 @@ async def proxy(provider: str, path: str, request: Request):
         response_body=response_body,
         source_ip=request.client.host if request.client else "unknown",
         duration_ms=duration_ms,
+        pii_detections_request=len(req_detections),
+        pii_detections_response=len(resp_detections),
+        pii_types_found=",".join(pii_types) if pii_types else None,
     )
 
-    # Return the provider's response to the caller.
+    # Return the scrubbed response to the caller.
     return Response(
         content=response_body,
         status_code=upstream.status_code,
