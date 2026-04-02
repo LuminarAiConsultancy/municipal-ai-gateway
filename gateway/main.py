@@ -13,10 +13,12 @@ from contextlib import asynccontextmanager
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response, HTTPException
-from sqlalchemy import Column, Integer, String, DateTime, Text, create_engine
-from sqlalchemy.orm import declarative_base, Session
+from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, create_engine
+from sqlalchemy.orm import Session
 
+from models import Base
 from scrubber import get_scrubber
+from auth import ApiKey, authenticate, generate_key
 
 load_dotenv()
 
@@ -46,8 +48,6 @@ PROVIDER_CONFIGS = {
 
 # ── Database model ────────────────────────────────────────────────────────────
 
-Base = declarative_base()
-
 
 class RequestLog(Base):
     __tablename__ = "request_logs"
@@ -67,6 +67,8 @@ class RequestLog(Base):
     pii_types_found = Column(Text)  # comma-separated entity types
     previous_hash = Column(String(64))  # hash of the previous log entry
     chain_hash = Column(String(64))  # SHA-256 hash of this entry including previous_hash
+    staff_key_id = Column(Integer)  # FK to api_keys.id
+    department = Column(String(128))
 
 
 def _init_db():
@@ -121,6 +123,8 @@ def _compute_chain_hash(
     pii_detections_request: int,
     pii_detections_response: int,
     pii_types_found: str | None,
+    staff_key_id: int | None = None,
+    department: str | None = None,
 ) -> str:
     """Compute a SHA-256 hash of the log entry fields chained to the previous hash."""
     payload = "|".join(
@@ -137,6 +141,8 @@ def _compute_chain_hash(
             pii_detections_request,
             pii_detections_response,
             pii_types_found or "",
+            staff_key_id or "",
+            department or "",
         ]
     )
     return hashlib.sha256(payload.encode()).hexdigest()
@@ -156,6 +162,8 @@ def _log_request(
     pii_detections_request: int = 0,
     pii_detections_response: int = 0,
     pii_types_found: str | None = None,
+    staff_key_id: int | None = None,
+    department: str | None = None,
 ):
     req_hash = _sha256(request_body) if request_body else None
     resp_hash = _sha256(response_body) if response_body else None
@@ -182,6 +190,8 @@ def _log_request(
             pii_detections_request=pii_detections_request,
             pii_detections_response=pii_detections_response,
             pii_types_found=pii_types_found,
+            staff_key_id=staff_key_id,
+            department=department,
         )
 
         session.add(
@@ -199,6 +209,8 @@ def _log_request(
                 pii_types_found=pii_types_found,
                 previous_hash=previous_hash,
                 chain_hash=chain_hash,
+                staff_key_id=staff_key_id,
+                department=department,
             )
         )
         session.commit()
@@ -268,6 +280,8 @@ async def audit_verify():
             pii_detections_request=entry.pii_detections_request or 0,
             pii_detections_response=entry.pii_detections_response or 0,
             pii_types_found=entry.pii_types_found,
+            staff_key_id=entry.staff_key_id,
+            department=entry.department,
         )
 
         if entry.chain_hash != expected:
@@ -299,6 +313,9 @@ async def proxy(provider: str, path: str, request: Request):
             POST /v1/anthropic/v1/messages
             POST /v1/google/v1beta/models/gemini-pro:generateContent
     """
+    # ── Authenticate the staff member ──
+    caller = authenticate(request, app.state.engine)
+
     config = PROVIDER_CONFIGS.get(provider)
     if config is None:
         raise HTTPException(
@@ -335,7 +352,7 @@ async def proxy(provider: str, path: str, request: Request):
     headers = {}
     for key, value in request.headers.items():
         lowered = key.lower()
-        if lowered in ("host", "content-length", "transfer-encoding"):
+        if lowered in ("host", "content-length", "transfer-encoding", "x-gateway-key"):
             continue
         headers[key] = value
 
@@ -392,6 +409,8 @@ async def proxy(provider: str, path: str, request: Request):
         pii_detections_request=len(req_detections),
         pii_detections_response=len(resp_detections),
         pii_types_found=",".join(pii_types) if pii_types else None,
+        staff_key_id=caller.id,
+        department=caller.department,
     )
 
     # Return the scrubbed response to the caller.
@@ -400,3 +419,82 @@ async def proxy(provider: str, path: str, request: Request):
         status_code=upstream.status_code,
         headers=dict(upstream.headers),
     )
+
+
+# ── Admin endpoints ──────────────────────────────────────────────────────────
+
+ADMIN_SECRET = os.getenv("GATEWAY_SECRET", "")
+
+
+def _require_admin(request: Request):
+    """Check the Authorization: Bearer <GATEWAY_SECRET> header for admin routes."""
+    auth_header = request.headers.get("authorization", "")
+    if not ADMIN_SECRET or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Admin authentication required.")
+    if auth_header[7:] != ADMIN_SECRET:
+        raise HTTPException(status_code=401, detail="Invalid admin secret.")
+
+
+@app.post("/admin/keys")
+async def create_key(request: Request):
+    """Create a new staff API key.
+
+    Body: {"department": "Planning", "description": "Jane Doe - Planning Dept"}
+    """
+    _require_admin(request)
+    body = await request.json()
+    department = body.get("department")
+    if not department:
+        raise HTTPException(status_code=400, detail="'department' is required.")
+
+    new_key = generate_key()
+    with Session(app.state.engine) as session:
+        api_key = ApiKey(
+            key=new_key,
+            department=department,
+            description=body.get("description", ""),
+        )
+        session.add(api_key)
+        session.commit()
+        key_id = api_key.id
+
+    return {
+        "id": key_id,
+        "key": new_key,
+        "department": department,
+        "description": body.get("description", ""),
+        "active": True,
+    }
+
+
+@app.get("/admin/keys")
+async def list_keys(request: Request):
+    """List all API keys (key value is masked)."""
+    _require_admin(request)
+    with Session(app.state.engine) as session:
+        keys = session.query(ApiKey).order_by(ApiKey.id).all()
+        return [
+            {
+                "id": k.id,
+                "key_prefix": k.key[:8] + "...",
+                "department": k.department,
+                "description": k.description,
+                "active": k.active,
+                "created_at": k.created_at.isoformat() if k.created_at else None,
+                "last_used_at": k.last_used_at.isoformat() if k.last_used_at else None,
+            }
+            for k in keys
+        ]
+
+
+@app.delete("/admin/keys/{key_id}")
+async def deactivate_key(key_id: int, request: Request):
+    """Deactivate a staff API key (soft delete)."""
+    _require_admin(request)
+    with Session(app.state.engine) as session:
+        api_key = session.query(ApiKey).filter(ApiKey.id == key_id).first()
+        if not api_key:
+            raise HTTPException(status_code=404, detail=f"Key {key_id} not found.")
+        api_key.active = False
+        session.commit()
+    return {"id": key_id, "active": False, "message": "Key deactivated."}
