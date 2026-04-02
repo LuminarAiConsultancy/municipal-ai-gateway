@@ -92,8 +92,8 @@ class SinRecognizer(PatternRecognizer):
         digits = re.sub(r"\D", "", pattern_text)
         if len(digits) != 9:
             return False
-        # SINs starting with 0 or 8 are invalid.
-        if digits[0] in ("0", "8"):
+        # SINs starting with 8 are reserved/invalid.
+        if digits[0] == "8":
             return False
         return _luhn_valid(digits)
 
@@ -103,8 +103,8 @@ class BcPhnRecognizer(PatternRecognizer):
 
     def __init__(self):
         patterns = [
-            Pattern("BC_PHN", r"\b9\d{9}\b", 0.4),
-            Pattern("BC_PHN_SPACED", r"\b9\d{3}[\s-]?\d{3}[\s-]?\d{3}\b", 0.4),
+            Pattern("BC_PHN", r"\b9\d{9}\b", 0.6),
+            Pattern("BC_PHN_SPACED", r"\b9\d{3}[\s-]?\d{3}[\s-]?\d{3}\b", 0.6),
         ]
         super().__init__(
             supported_entity="CA_BC_PHN",
@@ -453,7 +453,6 @@ class Scrubber:
             # Presidio built-ins
             "EMAIL_ADDRESS",
             "PERSON",
-            "LOCATION",
         ]
 
     # ── Public API ────────────────────────────────────────────────────────

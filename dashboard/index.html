@@ -287,6 +287,33 @@
     </div>
   </div>
 
+  <!-- Staff Keys -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Staff Keys</h2>
+      <button class="btn btn-sm btn-navy" onclick="loadKeysTable()">Refresh</button>
+    </div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Key Prefix</th>
+            <th>Department</th>
+            <th>Description</th>
+            <th>Created</th>
+            <th>Last Used</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="keys-tbody">
+          <tr><td colspan="8" class="empty-state">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- Chart + Quick Actions -->
   <div class="grid-2">
     <div class="panel">
@@ -503,8 +530,57 @@ async function loadKeys() {
     const active = data.filter(k => k.active).length;
     document.getElementById('stat-keys').textContent = active;
     document.getElementById('stat-keys-sub').textContent = data.length + ' total, ' + (data.length - active) + ' deactivated';
+    renderKeysTable(data);
   } catch (e) {
     document.getElementById('stat-keys').textContent = '?';
+  }
+}
+
+async function loadKeysTable() {
+  try {
+    const r = await fetch(API_URL + '/admin/keys', { headers: headers() });
+    const data = await r.json();
+    renderKeysTable(data);
+  } catch (e) {
+    document.getElementById('keys-tbody').innerHTML =
+      '<tr><td colspan="8" class="empty-state">Error loading keys</td></tr>';
+  }
+}
+
+function renderKeysTable(data) {
+  const tbody = document.getElementById('keys-tbody');
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No keys created yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map(k => {
+    const created = k.created_at ? new Date(k.created_at).toLocaleDateString() : '—';
+    const lastUsed = k.last_used_at ? new Date(k.last_used_at).toLocaleString() : 'Never';
+    const status = k.active
+      ? '<span class="badge badge-clean">Active</span>'
+      : '<span style="color:var(--red);font-size:0.8rem;font-weight:500">Inactive</span>';
+    const actions = k.active
+      ? '<button class="btn btn-sm" style="background:var(--red);color:white" onclick="deactivateKey(' + k.id + ',\'' + (k.department || '').replace(/'/g, "\\'") + '\')">Deactivate</button>'
+      : '—';
+    return '<tr><td>' + k.id + '</td><td><code>' + (k.key_prefix || '—') + '</code></td><td>' + (k.department || '—') + '</td><td>' + (k.description || '—') + '</td><td>' + created + '</td><td>' + lastUsed + '</td><td>' + status + '</td><td>' + actions + '</td></tr>';
+  }).join('');
+}
+
+async function deactivateKey(keyId, dept) {
+  if (!confirm('Deactivate key #' + keyId + ' (' + dept + ')? This cannot be undone.')) return;
+  try {
+    const r = await fetch(API_URL + '/admin/keys/' + keyId, {
+      method: 'DELETE',
+      headers: headers(),
+    });
+    if (r.ok) {
+      loadKeys();
+    } else {
+      const data = await r.json();
+      alert('Error: ' + (data.detail || 'Failed to deactivate key'));
+    }
+  } catch (e) {
+    alert('Network error: ' + e.message);
   }
 }
 

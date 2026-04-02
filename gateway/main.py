@@ -20,6 +20,13 @@ from sqlalchemy.orm import Session
 from models import Base
 from scrubber import get_scrubber
 from auth import ApiKey, authenticate, generate_key
+from costs import extract_usage, estimate_cost
+from policies import (
+    DepartmentPolicy,
+    check_rate_limit,
+    check_model_allowed,
+    check_budget,
+)
 
 load_dotenv()
 
@@ -70,6 +77,10 @@ class RequestLog(Base):
     chain_hash = Column(String(64))  # SHA-256 hash of this entry including previous_hash
     staff_key_id = Column(Integer)  # FK to api_keys.id
     department = Column(String(128))
+    model = Column(String(64))
+    input_tokens = Column(Integer, default=0)
+    output_tokens = Column(Integer, default=0)
+    estimated_cost_cents = Column(Integer, default=0)
 
 
 def _init_db():
@@ -165,6 +176,10 @@ def _log_request(
     pii_types_found: str | None = None,
     staff_key_id: int | None = None,
     department: str | None = None,
+    model: str | None = None,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    estimated_cost_cents: int = 0,
 ):
     req_hash = _sha256(request_body) if request_body else None
     resp_hash = _sha256(response_body) if response_body else None
@@ -212,6 +227,10 @@ def _log_request(
                 chain_hash=chain_hash,
                 staff_key_id=staff_key_id,
                 department=department,
+                model=model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                estimated_cost_cents=estimated_cost_cents,
             )
         )
         session.commit()
@@ -338,9 +357,25 @@ async def proxy(provider: str, path: str, request: Request):
             detail=f"API key for {provider} is not configured on the gateway.",
         )
 
+    # ── Rate limiting ──
+    check_rate_limit(caller.id, caller.department, app.state.engine)
+
     # Build the outbound request.
     target_url = f"{config['base_url']}/{path}"
     raw_body = await request.body()
+
+    # ── Extract model and enforce allowlist + budget ──
+    request_model = None
+    if raw_body:
+        try:
+            raw_payload = json.loads(raw_body)
+            request_model = raw_payload.get("model")
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            raw_payload = None
+
+    if request_model:
+        check_model_allowed(request_model, caller.department, app.state.engine)
+        check_budget(caller.department, app.state.engine)
 
     # ── Scrub PII from the outbound request body ──
     scrubber = app.state.scrubber
@@ -403,6 +438,21 @@ async def proxy(provider: str, path: str, request: Request):
     all_detections = req_detections + resp_detections
     pii_types = sorted({d.entity_type for d in all_detections})
 
+    # ── Extract token usage and estimate cost ──
+    input_tokens = 0
+    output_tokens = 0
+    cost_cents = 0
+    if response_body:
+        try:
+            resp_json = json.loads(response_body)
+            usage = extract_usage(provider, resp_json)
+            input_tokens = usage["input_tokens"]
+            output_tokens = usage["output_tokens"]
+            if request_model:
+                cost_cents = int(estimate_cost(request_model, input_tokens, output_tokens))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            pass
+
     # Log to PostgreSQL.
     _log_request(
         app.state.engine,
@@ -419,6 +469,10 @@ async def proxy(provider: str, path: str, request: Request):
         pii_types_found=",".join(pii_types) if pii_types else None,
         staff_key_id=caller.id,
         department=caller.department,
+        model=request_model,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        estimated_cost_cents=cost_cents,
     )
 
     # Return the scrubbed response to the caller.
@@ -534,6 +588,104 @@ async def list_requests(request: Request):
                 "pii_types_found": r.pii_types_found,
                 "department": r.department,
                 "staff_key_id": r.staff_key_id,
+                "model": r.model,
+                "input_tokens": r.input_tokens or 0,
+                "output_tokens": r.output_tokens or 0,
+                "estimated_cost_cents": r.estimated_cost_cents or 0,
             }
             for r in logs
         ]
+
+
+@app.post("/admin/policies")
+async def upsert_policy(request: Request):
+    """Create or update a department policy.
+
+    Body: {"department": "Planning", "requests_per_minute_per_key": 60,
+           "requests_per_minute_department": 200,
+           "allowed_models": ["gpt-4o", "gpt-4o-mini"],
+           "monthly_cost_limit_cents": 50000}
+    """
+    _require_admin(request)
+    body = await request.json()
+    department = body.get("department")
+    if not department:
+        raise HTTPException(status_code=400, detail="'department' is required.")
+
+    with Session(app.state.engine) as session:
+        policy = (
+            session.query(DepartmentPolicy)
+            .filter(DepartmentPolicy.department == department)
+            .first()
+        )
+        if policy:
+            if "requests_per_minute_per_key" in body:
+                policy.requests_per_minute_per_key = body["requests_per_minute_per_key"]
+            if "requests_per_minute_department" in body:
+                policy.requests_per_minute_department = body["requests_per_minute_department"]
+            if "allowed_models" in body:
+                models = body["allowed_models"]
+                policy.allowed_models = json.dumps(models) if isinstance(models, list) else models
+            if "monthly_cost_limit_cents" in body:
+                policy.monthly_cost_limit_cents = body["monthly_cost_limit_cents"]
+        else:
+            models = body.get("allowed_models")
+            policy = DepartmentPolicy(
+                department=department,
+                requests_per_minute_per_key=body.get("requests_per_minute_per_key", 60),
+                requests_per_minute_department=body.get("requests_per_minute_department", 200),
+                allowed_models=json.dumps(models) if isinstance(models, list) else models,
+                monthly_cost_limit_cents=body.get("monthly_cost_limit_cents"),
+            )
+            session.add(policy)
+        session.commit()
+        session.refresh(policy)
+        return {
+            "id": policy.id,
+            "department": policy.department,
+            "requests_per_minute_per_key": policy.requests_per_minute_per_key,
+            "requests_per_minute_department": policy.requests_per_minute_department,
+            "allowed_models": json.loads(policy.allowed_models) if policy.allowed_models else None,
+            "monthly_cost_limit_cents": policy.monthly_cost_limit_cents,
+        }
+
+
+@app.get("/admin/policies")
+async def list_policies(request: Request):
+    """List all department policies."""
+    _require_admin(request)
+    with Session(app.state.engine) as session:
+        policies = session.query(DepartmentPolicy).order_by(DepartmentPolicy.department).all()
+        return [
+            {
+                "id": p.id,
+                "department": p.department,
+                "requests_per_minute_per_key": p.requests_per_minute_per_key,
+                "requests_per_minute_department": p.requests_per_minute_department,
+                "allowed_models": json.loads(p.allowed_models) if p.allowed_models else None,
+                "monthly_cost_limit_cents": p.monthly_cost_limit_cents,
+            }
+            for p in policies
+        ]
+
+
+@app.get("/admin/policies/{department}")
+async def get_policy(department: str, request: Request):
+    """Get a single department's policy."""
+    _require_admin(request)
+    with Session(app.state.engine) as session:
+        policy = (
+            session.query(DepartmentPolicy)
+            .filter(DepartmentPolicy.department == department)
+            .first()
+        )
+    if not policy:
+        raise HTTPException(status_code=404, detail=f"No policy for department '{department}'.")
+    return {
+        "id": policy.id,
+        "department": policy.department,
+        "requests_per_minute_per_key": policy.requests_per_minute_per_key,
+        "requests_per_minute_department": policy.requests_per_minute_department,
+        "allowed_models": json.loads(policy.allowed_models) if policy.allowed_models else None,
+        "monthly_cost_limit_cents": policy.monthly_cost_limit_cents,
+    }
