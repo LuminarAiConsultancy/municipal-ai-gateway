@@ -251,6 +251,100 @@ class CanadianAddressRecognizer(PatternRecognizer):
         )
 
 
+class ParcelIdentifierRecognizer(PatternRecognizer):
+    """BC PID (Parcel Identifier): 3 groups of 3 digits separated by dashes."""
+
+    def __init__(self):
+        patterns = [
+            Pattern("PID", r"\b\d{3}-\d{3}-\d{3}\b", 0.4),
+        ]
+        super().__init__(
+            supported_entity="CA_PID",
+            supported_language="en",
+            patterns=patterns,
+            context=[
+                "pid",
+                "parcel",
+                "parcel identifier",
+                "land title",
+                "property",
+                "lot",
+                "title",
+                "land registry",
+            ],
+        )
+
+
+class FolioNumberRecognizer(PatternRecognizer):
+    """Municipal folio / roll number used for property tax."""
+
+    def __init__(self):
+        patterns = [
+            # 4-3-3 format: 1234-567-890
+            Pattern("FOLIO_4_3_3", r"\b\d{4}-\d{3}-\d{3}\b", 0.4),
+            # 5-3 format: 12345-678
+            Pattern("FOLIO_5_3", r"\b\d{5}-\d{3}\b", 0.4),
+            # BC assessment roll: up to 15 digits with optional dots/dashes
+            Pattern(
+                "BC_ROLL",
+                r"\b\d{2}[-.]?\d{3}[-.]?\d{3}[-.]?\d{3}[-.]?\d{4}\b",
+                0.4,
+            ),
+        ]
+        super().__init__(
+            supported_entity="CA_FOLIO",
+            supported_language="en",
+            patterns=patterns,
+            context=[
+                "folio",
+                "roll",
+                "roll number",
+                "assessment",
+                "tax",
+                "property tax",
+                "bc assessment",
+                "assessed",
+            ],
+        )
+
+
+class MunicipalCaseNumberRecognizer(PatternRecognizer):
+    """Municipal file/case numbers: BL-2024-1234 (bylaw), BP-2024-5678 (building permit), etc."""
+
+    def __init__(self):
+        patterns = [
+            # Standard prefix-year-number: BL-2024-1234, BP-2024-5678, DVP-2023-001
+            Pattern(
+                "CASE_PREFIX_YEAR",
+                r"\b[A-Z]{2,4}-\d{4}-\d{3,6}\b",
+                0.6,
+            ),
+            # Without year: FILE-12345, REZ-001
+            Pattern(
+                "CASE_PREFIX_NUM",
+                r"\b(?:BL|BP|DVP|REZ|SUB|DP|TUP|ALR|OCP|FILE)-\d{3,6}\b",
+                0.5,
+            ),
+        ]
+        super().__init__(
+            supported_entity="CA_CASE_NUMBER",
+            supported_language="en",
+            patterns=patterns,
+            context=[
+                "bylaw",
+                "permit",
+                "application",
+                "file",
+                "case",
+                "variance",
+                "rezoning",
+                "subdivision",
+                "development",
+                "building permit",
+            ],
+        )
+
+
 class CanadianPhoneRecognizer(PatternRecognizer):
     """Canadian phone numbers in common formats."""
 
@@ -291,6 +385,9 @@ PLACEHOLDER_MAP = {
     "CA_POSTAL_CODE": "[POSTAL CODE REMOVED]",
     "CA_PHONE_NUMBER": "[PHONE REMOVED]",
     "CA_ADDRESS": "[ADDRESS REMOVED]",
+    "CA_PID": "[PID REMOVED]",
+    "CA_FOLIO": "[FOLIO REMOVED]",
+    "CA_CASE_NUMBER": "[CASE NUMBER REMOVED]",
     "EMAIL_ADDRESS": "[EMAIL REMOVED]",
     "PERSON": "[NAME REMOVED]",
     "LOCATION": "[ADDRESS REMOVED]",
@@ -332,6 +429,9 @@ class Scrubber:
         self._analyzer.registry.add_recognizer(QuebecHealthRecognizer())
         self._analyzer.registry.add_recognizer(CanadianPostalCodeRecognizer())
         self._analyzer.registry.add_recognizer(CanadianAddressRecognizer())
+        self._analyzer.registry.add_recognizer(ParcelIdentifierRecognizer())
+        self._analyzer.registry.add_recognizer(FolioNumberRecognizer())
+        self._analyzer.registry.add_recognizer(MunicipalCaseNumberRecognizer())
         self._analyzer.registry.add_recognizer(CanadianPhoneRecognizer())
 
         self._anonymizer = AnonymizerEngine()
@@ -347,6 +447,9 @@ class Scrubber:
             "CA_POSTAL_CODE",
             "CA_PHONE_NUMBER",
             "CA_ADDRESS",
+            "CA_PID",
+            "CA_FOLIO",
+            "CA_CASE_NUMBER",
             # Presidio built-ins
             "EMAIL_ADDRESS",
             "PERSON",

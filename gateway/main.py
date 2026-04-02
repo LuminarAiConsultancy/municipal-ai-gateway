@@ -65,6 +65,8 @@ class RequestLog(Base):
     pii_detections_request = Column(Integer, default=0)
     pii_detections_response = Column(Integer, default=0)
     pii_types_found = Column(Text)  # comma-separated entity types
+    previous_hash = Column(String(64))  # hash of the previous log entry
+    chain_hash = Column(String(64))  # SHA-256 hash of this entry including previous_hash
 
 
 def _init_db():
@@ -105,6 +107,41 @@ def _scrub_payload(scrubber, payload, *, direction: str):
     return cleaned, detections
 
 
+def _compute_chain_hash(
+    *,
+    previous_hash: str | None,
+    provider: str,
+    method: str,
+    path: str,
+    request_hash: str | None,
+    response_status: int,
+    response_hash: str | None,
+    source_ip: str,
+    duration_ms: int,
+    pii_detections_request: int,
+    pii_detections_response: int,
+    pii_types_found: str | None,
+) -> str:
+    """Compute a SHA-256 hash of the log entry fields chained to the previous hash."""
+    payload = "|".join(
+        str(v) for v in [
+            previous_hash or "GENESIS",
+            provider,
+            method,
+            path,
+            request_hash or "",
+            response_status,
+            response_hash or "",
+            source_ip,
+            duration_ms,
+            pii_detections_request,
+            pii_detections_response,
+            pii_types_found or "",
+        ]
+    )
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
 def _log_request(
     engine,
     *,
@@ -120,20 +157,48 @@ def _log_request(
     pii_detections_response: int = 0,
     pii_types_found: str | None = None,
 ):
+    req_hash = _sha256(request_body) if request_body else None
+    resp_hash = _sha256(response_body) if response_body else None
+
     with Session(engine) as session:
+        # Fetch the most recent chain hash to link to.
+        last = (
+            session.query(RequestLog.chain_hash)
+            .order_by(RequestLog.id.desc())
+            .first()
+        )
+        previous_hash = last.chain_hash if last else None
+
+        chain_hash = _compute_chain_hash(
+            previous_hash=previous_hash,
+            provider=provider,
+            method=method,
+            path=path,
+            request_hash=req_hash,
+            response_status=response_status,
+            response_hash=resp_hash,
+            source_ip=source_ip,
+            duration_ms=duration_ms,
+            pii_detections_request=pii_detections_request,
+            pii_detections_response=pii_detections_response,
+            pii_types_found=pii_types_found,
+        )
+
         session.add(
             RequestLog(
                 provider=provider,
                 method=method,
                 path=path,
-                request_hash=_sha256(request_body) if request_body else None,
+                request_hash=req_hash,
                 response_status=response_status,
-                response_hash=_sha256(response_body) if response_body else None,
+                response_hash=resp_hash,
                 source_ip=source_ip,
                 duration_ms=duration_ms,
                 pii_detections_request=pii_detections_request,
                 pii_detections_response=pii_detections_response,
                 pii_types_found=pii_types_found,
+                previous_hash=previous_hash,
+                chain_hash=chain_hash,
             )
         )
         session.commit()
@@ -163,6 +228,64 @@ app = FastAPI(
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/audit/verify")
+async def audit_verify():
+    """Walk the entire hash chain and confirm no entries have been tampered with."""
+    with Session(app.state.engine) as session:
+        logs = (
+            session.query(RequestLog)
+            .order_by(RequestLog.id.asc())
+            .all()
+        )
+
+    if not logs:
+        return {"status": "ok", "entries_checked": 0, "message": "No audit entries yet."}
+
+    previous_hash: str | None = None
+    for entry in logs:
+        # The first entry should have no previous_hash.
+        if entry.previous_hash != previous_hash:
+            return {
+                "status": "tampered",
+                "entry_id": entry.id,
+                "message": f"Chain link broken at entry {entry.id}: "
+                           f"expected previous_hash={previous_hash!r}, "
+                           f"found={entry.previous_hash!r}",
+            }
+
+        expected = _compute_chain_hash(
+            previous_hash=previous_hash,
+            provider=entry.provider,
+            method=entry.method,
+            path=entry.path,
+            request_hash=entry.request_hash,
+            response_status=entry.response_status,
+            response_hash=entry.response_hash,
+            source_ip=entry.source_ip,
+            duration_ms=entry.duration_ms,
+            pii_detections_request=entry.pii_detections_request or 0,
+            pii_detections_response=entry.pii_detections_response or 0,
+            pii_types_found=entry.pii_types_found,
+        )
+
+        if entry.chain_hash != expected:
+            return {
+                "status": "tampered",
+                "entry_id": entry.id,
+                "message": f"Hash mismatch at entry {entry.id}: "
+                           f"stored={entry.chain_hash!r}, "
+                           f"computed={expected!r}",
+            }
+
+        previous_hash = entry.chain_hash
+
+    return {
+        "status": "ok",
+        "entries_checked": len(logs),
+        "message": f"All {len(logs)} audit entries verified. Chain is intact.",
+    }
 
 
 @app.api_route(
