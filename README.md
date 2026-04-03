@@ -111,7 +111,7 @@ The gateway handles the **technical layer** -- what staff are sending and what P
 
 Together they answer every question a privacy commissioner will ask.
 
-**Learn more: [luminaryx.ca]([[https://app.staging.luminaryx.ca]**
+**Learn more: [luminaryx.ca]([(https://app.staging.luminaryx.ca)]**
 
 ---
 
