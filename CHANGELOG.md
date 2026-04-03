@@ -2,6 +2,34 @@
 
 All notable changes to the Municipal AI Gateway are documented in this file.
 
+## [1.1.0] - 2026-04-03
+
+### Security
+- **Per-admin accounts with TOTP MFA**: Replaced single shared `GATEWAY_SECRET` with individual admin accounts (email, bcrypt password, optional TOTP). Login flow: email + password → TOTP code → 8-hour JWT session. RFC 6238 TOTP compatible with Google Authenticator / Authy. Sessions stored in Redis for server-side revocation. Legacy `GATEWAY_SECRET` auth remains supported for backward compatibility.
+- **Admin bootstrap**: Initial admin account auto-created from `ADMIN_EMAIL` and `ADMIN_PASSWORD` env vars on first startup.
+
+### Added
+- **Redis-backed rate limiting**: Sliding window rate limiter using Redis sorted sets (`gateway/redis_client.py`, `gateway/policies.py`). Rate limits survive gateway restarts and work across multiple gateway instances. Falls back to in-memory limiting when Redis is unavailable. Configurable via `RATE_LIMIT_REDIS_URL` and `RATE_LIMIT_REQUESTS_PER_MINUTE` env vars. Redis added to `docker-compose.yml` (port 6379, internal only, 128 MB max memory).
+- **Admin auth endpoints**: `POST /admin/login`, `POST /admin/totp/setup`, `POST /admin/totp/verify`, `POST /admin/logout`, `POST /admin/admins`, `GET /admin/admins`.
+- **LDAP / Active Directory integration**: Optional LDAP authentication (`LDAP_ENABLED=true`). Staff authenticate with AD credentials via `POST /auth/ldap` and receive an auto-provisioned gateway API key. Supports simple bind and STARTTLS. Configurable via `LDAP_SERVER`, `LDAP_PORT`, `LDAP_BASE_DN`, `LDAP_BIND_DN`, `LDAP_BIND_PASSWORD`, `LDAP_USER_FILTER`, `LDAP_DEPT_ATTRIBUTE`.
+- **Redis health check**: `/health` endpoint now reports Redis status (`ok`, `degraded`, or `not_configured`). Redis is optional — degraded Redis does not affect overall gateway health.
+- **Alembic migration 003**: Creates `admin_users` table for per-admin accounts.
+- **Alembic migration 004**: Adds `ldap_dn` column to `api_keys` table for LDAP user mapping.
+
+### Changed
+- All admin endpoints (`/admin/*`) now accept JWT session tokens in addition to legacy `GATEWAY_SECRET`.
+- `docker-compose.yml` adds Redis 7 Alpine service with health check.
+- `.env.example` updated with Redis, admin account, and LDAP configuration.
+
+### Dependencies Added
+- `redis[hiredis]` — Redis client for rate limiting and session storage
+- `bcrypt` — Password hashing for admin accounts
+- `PyJWT` — JWT session tokens
+- `pyotp` — TOTP generation and verification
+- `qrcode[pil]` — QR code generation for TOTP enrollment
+- `ldap3` — LDAP/AD authentication
+- `fakeredis[lua]` (test only) — Redis mock for testing
+
 ## [0.1.0] - 2026-04-03
 
 ### Security

@@ -36,8 +36,29 @@ from policies import (
     check_model_allowed,
     check_budget,
 )
-from schemas import CreateKeyRequest, UpsertPolicyRequest
+from schemas import (
+    CreateKeyRequest, UpsertPolicyRequest,
+    AdminLoginRequest, AdminTotpVerifyRequest, AdminTotpSetupRequest,
+    AdminCreateRequest, LdapLoginRequest,
+)
 from database import create_db_engine, create_session_factory, init_db
+from redis_client import get_redis, close_redis, ping_redis
+from ldap_auth import is_ldap_enabled, ldap_authenticate_and_provision
+from admin_auth import (
+    AdminUser,
+    verify_password,
+    hash_password,
+    generate_totp_secret,
+    get_totp_uri,
+    verify_totp,
+    create_temp_token,
+    create_session_token,
+    decode_token,
+    store_session,
+    revoke_session,
+    require_admin_session,
+    bootstrap_admin,
+)
 
 load_dotenv()
 
@@ -344,8 +365,25 @@ async def lifespan(app: FastAPI):
     app.state.session_factory = session_factory
     app.state.http_client = httpx.AsyncClient(timeout=120.0)
     app.state.scrubber = get_scrubber()
+
+    # Connect to Redis (optional — falls back to in-memory rate limiting)
+    try:
+        app.state.redis = await get_redis()
+        if await ping_redis():
+            logger.info("redis_available", purpose="rate_limiting")
+        else:
+            app.state.redis = None
+            logger.warning("redis_unavailable", fallback="in_memory_rate_limiting")
+    except Exception:
+        app.state.redis = None
+        logger.warning("redis_unavailable", fallback="in_memory_rate_limiting")
+
+    # Bootstrap initial admin account from env vars
+    await bootstrap_admin(session_factory)
+
     yield
     await app.state.http_client.aclose()
+    await close_redis()
     await engine.dispose()
 
 
@@ -387,7 +425,18 @@ async def health():
     # Scrubber check
     checks["scrubber"] = "ok" if getattr(app.state, "scrubber", None) is not None else "error"
 
-    all_ok = all(v == "ok" for v in checks.values())
+    # Redis check (optional — degraded without it)
+    if getattr(app.state, "redis", None) is not None:
+        try:
+            checks["redis"] = "ok" if await ping_redis() else "degraded"
+        except Exception:
+            checks["redis"] = "degraded"
+    else:
+        checks["redis"] = "not_configured"
+
+    # Redis is optional — "not_configured" and "degraded" don't affect overall status
+    required_checks = {k: v for k, v in checks.items() if k != "redis"}
+    all_ok = all(v == "ok" for v in required_checks.values())
     status = "ok" if all_ok else "degraded"
     return JSONResponse(
         status_code=200 if all_ok else 503,
@@ -506,7 +555,10 @@ async def proxy(provider: str, path: str, request: Request):
         )
 
     # ── Rate limiting ──
-    await check_rate_limit(caller.id, caller.department, app.state.session_factory)
+    await check_rate_limit(
+        caller.id, caller.department, app.state.session_factory,
+        redis_client=getattr(app.state, "redis", None),
+    )
 
     # Build the outbound request.
     target_url = f"{config['base_url']}/{path}"
@@ -767,18 +819,283 @@ async def _handle_streaming_proxy(
     )
 
 
+# ── LDAP authentication endpoint ─────────────────────────────────────────────
+
+
+@app.post("/auth/ldap")
+async def ldap_login(request: Request):
+    """Authenticate with LDAP/AD credentials and receive a gateway API key.
+
+    On first login, auto-provisions a new API key. On subsequent logins,
+    returns the existing key for the LDAP user.
+
+    Body: {"username": "jsmith", "password": "..."}
+    """
+    if not is_ldap_enabled():
+        raise HTTPException(
+            status_code=404,
+            detail="LDAP authentication is not enabled. Set LDAP_ENABLED=true.",
+        )
+
+    from pydantic import ValidationError
+    try:
+        body = LdapLoginRequest(**(await request.json()))
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=e.errors())
+
+    result = await ldap_authenticate_and_provision(
+        body.username, body.password, app.state.session_factory,
+    )
+
+    if result is None:
+        raise HTTPException(status_code=401, detail="LDAP authentication failed.")
+
+    return result
+
+
 # ── Admin endpoints ──────────────────────────────────────────────────────────
 
 ADMIN_SECRET = os.getenv("GATEWAY_SECRET", "")
 
 
 def _require_admin(request: Request):
-    """Check the Authorization: Bearer <GATEWAY_SECRET> header for admin routes."""
+    """Check the Authorization: Bearer <GATEWAY_SECRET> header for admin routes.
+
+    Legacy auth mode — kept for backward compatibility.
+    """
     auth_header = request.headers.get("authorization", "")
     if not ADMIN_SECRET or not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Admin authentication required.")
     if auth_header[7:] != ADMIN_SECRET:
         raise HTTPException(status_code=401, detail="Invalid admin secret.")
+
+
+async def _require_admin_session(request: Request):
+    """Validate admin access via JWT session or legacy GATEWAY_SECRET."""
+    return await require_admin_session(
+        request,
+        redis_client=getattr(app.state, "redis", None),
+    )
+
+
+# ── Admin auth endpoints ─────────────────────────────────────────────────────
+
+
+@app.post("/admin/login")
+async def admin_login(request: Request):
+    """Authenticate an admin with email and password.
+
+    Returns a temp_token for the TOTP verification step, or a session
+    token directly if TOTP is not enrolled.
+
+    Body: {"email": "admin@example.com", "password": "..."}
+    """
+    from pydantic import ValidationError
+    try:
+        body = AdminLoginRequest(**(await request.json()))
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=e.errors())
+
+    async with app.state.session_factory() as session:
+        result = await session.execute(
+            select(AdminUser).filter(AdminUser.email == body.email)
+        )
+        admin = result.scalars().first()
+
+    if not admin or not admin.is_active:
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
+
+    if not verify_password(body.password, admin.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
+
+    temp_token = create_temp_token(admin.id, admin.email)
+
+    if admin.totp_secret:
+        # TOTP is enrolled — require verification
+        return {"requires_totp": True, "temp_token": temp_token}
+    else:
+        # No TOTP enrolled — issue session directly
+        token, session_id = create_session_token(admin.id, admin.email)
+        await store_session(
+            getattr(app.state, "redis", None),
+            session_id, admin.id, admin.email,
+        )
+        # Update last login
+        async with app.state.session_factory() as session:
+            result = await session.execute(
+                select(AdminUser).filter(AdminUser.id == admin.id)
+            )
+            db_admin = result.scalars().first()
+            if db_admin:
+                db_admin.last_login_at = dt.datetime.now(dt.timezone.utc)
+                await session.commit()
+
+        logger.info("admin_login", email=admin.email, totp=False)
+        return {"requires_totp": False, "token": token}
+
+
+@app.post("/admin/totp/setup")
+async def admin_totp_setup(request: Request):
+    """Generate a TOTP secret and QR code URI for enrollment.
+
+    Requires a valid temp_token from /admin/login.
+
+    Body: {"temp_token": "..."}
+    """
+    from pydantic import ValidationError
+    import jwt as pyjwt
+    try:
+        body = AdminTotpSetupRequest(**(await request.json()))
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=e.errors())
+
+    try:
+        payload = decode_token(body.temp_token, expected_type="temp")
+    except pyjwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid or expired temp token.")
+
+    admin_id = payload["sub"]
+    email = payload["email"]
+
+    # Generate and store TOTP secret
+    secret = generate_totp_secret()
+    async with app.state.session_factory() as session:
+        result = await session.execute(
+            select(AdminUser).filter(AdminUser.id == admin_id)
+        )
+        admin = result.scalars().first()
+        if not admin:
+            raise HTTPException(status_code=404, detail="Admin not found.")
+        admin.totp_secret = secret
+        await session.commit()
+
+    uri = get_totp_uri(secret, email)
+    logger.info("admin_totp_setup", email=email)
+    return {"secret": secret, "uri": uri}
+
+
+@app.post("/admin/totp/verify")
+async def admin_totp_verify(request: Request):
+    """Verify a TOTP code and issue a session token.
+
+    Body: {"temp_token": "...", "code": "123456"}
+    """
+    from pydantic import ValidationError
+    import jwt as pyjwt
+    try:
+        body = AdminTotpVerifyRequest(**(await request.json()))
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=e.errors())
+
+    try:
+        payload = decode_token(body.temp_token, expected_type="temp")
+    except pyjwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid or expired temp token.")
+
+    admin_id = payload["sub"]
+    email = payload["email"]
+
+    async with app.state.session_factory() as session:
+        result = await session.execute(
+            select(AdminUser).filter(AdminUser.id == admin_id)
+        )
+        admin = result.scalars().first()
+
+    if not admin or not admin.is_active:
+        raise HTTPException(status_code=401, detail="Admin account not found or inactive.")
+
+    if not admin.totp_secret:
+        raise HTTPException(status_code=400, detail="TOTP not enrolled. Use /admin/totp/setup first.")
+
+    if not verify_totp(admin.totp_secret, body.code):
+        raise HTTPException(status_code=401, detail="Invalid TOTP code.")
+
+    # Issue session token
+    token, session_id = create_session_token(admin.id, admin.email)
+    await store_session(
+        getattr(app.state, "redis", None),
+        session_id, admin.id, admin.email,
+    )
+
+    # Update last login
+    async with app.state.session_factory() as session:
+        result = await session.execute(
+            select(AdminUser).filter(AdminUser.id == admin.id)
+        )
+        db_admin = result.scalars().first()
+        if db_admin:
+            db_admin.last_login_at = dt.datetime.now(dt.timezone.utc)
+            await session.commit()
+
+    logger.info("admin_login", email=admin.email, totp=True)
+    return {"token": token}
+
+
+@app.post("/admin/logout")
+async def admin_logout(request: Request):
+    """Revoke the current admin session."""
+    session_info = await _require_admin_session(request)
+    session_id = session_info.get("jti")
+    if session_id and session_id != "legacy":
+        await revoke_session(getattr(app.state, "redis", None), session_id)
+    return {"message": "Logged out."}
+
+
+@app.post("/admin/admins")
+async def create_admin(request: Request):
+    """Create a new admin account. Requires an existing admin session.
+
+    Body: {"email": "admin@example.com", "password": "...", "is_active": true}
+    """
+    await _require_admin_session(request)
+    from pydantic import ValidationError
+    try:
+        body = AdminCreateRequest(**(await request.json()))
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=e.errors())
+
+    async with app.state.session_factory() as session:
+        result = await session.execute(
+            select(AdminUser).filter(AdminUser.email == body.email)
+        )
+        existing = result.scalars().first()
+        if existing:
+            raise HTTPException(status_code=409, detail="Admin with this email already exists.")
+
+        admin = AdminUser(
+            email=body.email,
+            password_hash=hash_password(body.password),
+            is_active=body.is_active,
+        )
+        session.add(admin)
+        await session.commit()
+        admin_id = admin.id
+
+    logger.info("admin_created", email=body.email)
+    return {"id": admin_id, "email": body.email, "is_active": body.is_active}
+
+
+@app.get("/admin/admins")
+async def list_admins(request: Request):
+    """List all admin accounts."""
+    await _require_admin_session(request)
+    async with app.state.session_factory() as session:
+        result = await session.execute(select(AdminUser).order_by(AdminUser.id))
+        admins = result.scalars().all()
+        return [
+            {
+                "id": a.id,
+                "email": a.email,
+                "is_active": a.is_active,
+                "has_totp": a.totp_secret is not None,
+                "created_at": a.created_at.isoformat() if a.created_at else None,
+                "last_login_at": a.last_login_at.isoformat() if a.last_login_at else None,
+            }
+            for a in admins
+        ]
+
+
+# ── Staff key management endpoints ──────────────────────────────────────────
 
 
 @app.post("/admin/keys")
@@ -787,7 +1104,7 @@ async def create_key(request: Request):
 
     Body: {"department": "Planning", "description": "Jane Doe - Planning Dept"}
     """
-    _require_admin(request)
+    await _require_admin_session(request)
     from pydantic import ValidationError
     try:
         body = CreateKeyRequest(**(await request.json()))
@@ -819,7 +1136,7 @@ async def create_key(request: Request):
 @app.get("/admin/keys")
 async def list_keys(request: Request):
     """List all API keys (key value is masked)."""
-    _require_admin(request)
+    await _require_admin_session(request)
     async with app.state.session_factory() as session:
         result = await session.execute(select(ApiKey).order_by(ApiKey.id))
         keys = result.scalars().all()
@@ -840,7 +1157,7 @@ async def list_keys(request: Request):
 @app.delete("/admin/keys/{key_id}")
 async def deactivate_key(key_id: int, request: Request):
     """Deactivate a staff API key (soft delete)."""
-    _require_admin(request)
+    await _require_admin_session(request)
     async with app.state.session_factory() as session:
         result = await session.execute(select(ApiKey).filter(ApiKey.id == key_id))
         api_key = result.scalars().first()
@@ -883,7 +1200,7 @@ async def list_requests(
     provider: str | None = None,
 ):
     """Return paginated proxy requests with PII detection summary."""
-    _require_admin(request)
+    await _require_admin_session(request)
     async with app.state.session_factory() as session:
         query = select(RequestLog)
         count_query = select(func.count(RequestLog.id))
@@ -923,7 +1240,7 @@ async def export_requests(
     department: str | None = None,
 ):
     """Export audit log entries as CSV or JSON file download."""
-    _require_admin(request)
+    await _require_admin_session(request)
 
     async with app.state.session_factory() as session:
         query = select(RequestLog).order_by(RequestLog.id.asc())
@@ -966,7 +1283,7 @@ async def upsert_policy(request: Request):
            "allowed_models": ["gpt-4o", "gpt-4o-mini"],
            "monthly_cost_limit_cents": 50000}
     """
-    _require_admin(request)
+    await _require_admin_session(request)
     from pydantic import ValidationError
     try:
         body = UpsertPolicyRequest(**(await request.json()))
@@ -1012,7 +1329,7 @@ async def upsert_policy(request: Request):
 @app.get("/admin/policies")
 async def list_policies(request: Request):
     """List all department policies."""
-    _require_admin(request)
+    await _require_admin_session(request)
     async with app.state.session_factory() as session:
         result = await session.execute(
             select(DepartmentPolicy).order_by(DepartmentPolicy.department)
@@ -1034,7 +1351,7 @@ async def list_policies(request: Request):
 @app.get("/admin/policies/{department}")
 async def get_policy(department: str, request: Request):
     """Get a single department's policy."""
-    _require_admin(request)
+    await _require_admin_session(request)
     async with app.state.session_factory() as session:
         result = await session.execute(
             select(DepartmentPolicy).filter(DepartmentPolicy.department == department)

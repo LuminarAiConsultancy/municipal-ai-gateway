@@ -35,6 +35,7 @@ class ApiKey(Base):
     active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: dt.datetime.now(dt.timezone.utc))
     last_used_at = Column(DateTime(timezone=True))
+    ldap_dn = Column(String(512), nullable=True, index=True)  # LDAP distinguished name
 
 
 def generate_key() -> str:
@@ -122,5 +123,6 @@ def _detach(api_key: ApiKey) -> ApiKey:
         active=api_key.active,
         created_at=api_key.created_at,
         last_used_at=api_key.last_used_at,
+        ldap_dn=api_key.ldap_dn,
     )
     return detached

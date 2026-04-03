@@ -1,12 +1,14 @@
 """Department policy enforcement for the Municipal AI Gateway.
 
-Handles rate limiting (in-memory), model allowlisting, and monthly
-budget enforcement. Policies are stored per-department in PostgreSQL.
+Handles rate limiting (Redis-backed with in-memory fallback), model
+allowlisting, and monthly budget enforcement. Policies are stored
+per-department in PostgreSQL.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import time
 import datetime as dt
 from collections import defaultdict, deque
@@ -16,6 +18,9 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
 from models import Base
+from logging_config import get_logger
+
+logger = get_logger("policies")
 
 
 # ── Database model ───────────────────────────────────────────────────────────
@@ -41,18 +46,106 @@ class DepartmentPolicy(Base):
     )
 
 
-# ── Rate limiter (in-memory) ────────────────────────────────────────────────
+# ── Rate limiter configuration ───────────────────────────────────────────────
 
-
-DEFAULT_RPM_PER_KEY = 60
+DEFAULT_RPM_PER_KEY = int(os.getenv("RATE_LIMIT_REQUESTS_PER_MINUTE", "60"))
 DEFAULT_RPM_DEPARTMENT = 200
+
+WINDOW_SECONDS = 60
+
+
+# ── Redis-backed sliding window rate limiter ─────────────────────────────────
+
+
+class RedisRateLimiter:
+    """Sliding-window rate limiter backed by Redis sorted sets.
+
+    Each rate-limit bucket is a sorted set where:
+      - Member: ``{timestamp_ns}:{random}`` (unique per request)
+      - Score: Unix timestamp in seconds (float)
+
+    On each check we:
+      1. ZREMRANGEBYSCORE to prune entries older than the window.
+      2. ZCARD to count current entries in the window.
+      3. ZADD to record the new request (only after check passes).
+
+    All operations use a Redis pipeline for atomicity and performance.
+    """
+
+    def __init__(self, redis_client):
+        self._redis = redis_client
+
+    def _key_bucket(self, key_id: int) -> str:
+        return f"ratelimit:key:{key_id}"
+
+    def _dept_bucket(self, department: str) -> str:
+        return f"ratelimit:dept:{department}"
+
+    async def check_and_record(
+        self,
+        *,
+        key_id: int,
+        department: str,
+        rpm_key: int,
+        rpm_dept: int,
+    ) -> None:
+        """Check rate limits and record the request if within limits.
+
+        Raises HTTPException 429 if either per-key or per-department
+        limit is exceeded. The request is only recorded after passing
+        both checks.
+        """
+        now = time.time()
+        cutoff = now - WINDOW_SECONDS
+        key_bucket = self._key_bucket(key_id)
+        dept_bucket = self._dept_bucket(department)
+
+        # Phase 1: check both buckets in a single pipeline
+        pipe = self._redis.pipeline(transaction=False)
+        pipe.zremrangebyscore(key_bucket, "-inf", cutoff)
+        pipe.zcard(key_bucket)
+        pipe.zremrangebyscore(dept_bucket, "-inf", cutoff)
+        pipe.zcard(dept_bucket)
+        results = await pipe.execute()
+
+        key_count = results[1]
+        dept_count = results[3]
+
+        if key_count >= rpm_key:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit exceeded: {rpm_key} requests/min per key.",
+                headers={"Retry-After": "60"},
+            )
+
+        if dept_count >= rpm_dept:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit exceeded: {rpm_dept} requests/min for department '{department}'.",
+                headers={"Retry-After": "60"},
+            )
+
+        # Phase 2: record the request in both buckets
+        # Use nanosecond timestamp + key_id to ensure uniqueness
+        member_key = f"{now}:{key_id}"
+        member_dept = f"{now}:{key_id}:{department}"
+
+        pipe2 = self._redis.pipeline(transaction=False)
+        pipe2.zadd(key_bucket, {member_key: now})
+        pipe2.expire(key_bucket, WINDOW_SECONDS + 10)
+        pipe2.zadd(dept_bucket, {member_dept: now})
+        pipe2.expire(dept_bucket, WINDOW_SECONDS + 10)
+        await pipe2.execute()
+
+
+# ── In-memory fallback rate limiter ──────────────────────────────────────────
 
 
 class RateLimiter:
     """Sliding-window rate limiter using in-memory deques.
 
-    Counters reset on gateway restart (acceptable for single-instance
-    municipal deployments).
+    Used as a fallback when Redis is unavailable. Counters reset on
+    gateway restart.
     """
 
     def __init__(
@@ -102,8 +195,11 @@ class RateLimiter:
 _limiters: dict[str, RateLimiter] = {}
 
 
-async def _get_or_create_limiter(department: str, session_factory) -> RateLimiter:
-    """Return a per-department RateLimiter, creating or updating as needed."""
+# ── Shared helpers for fetching policy limits ────────────────────────────────
+
+
+async def _get_policy_limits(department: str, session_factory):
+    """Fetch per-key and per-department RPM limits from the database."""
     async with session_factory() as session:
         result = await session.execute(
             select(DepartmentPolicy).filter(DepartmentPolicy.department == department)
@@ -112,6 +208,12 @@ async def _get_or_create_limiter(department: str, session_factory) -> RateLimite
 
     rpm_key = policy.requests_per_minute_per_key or DEFAULT_RPM_PER_KEY if policy else DEFAULT_RPM_PER_KEY
     rpm_dept = policy.requests_per_minute_department or DEFAULT_RPM_DEPARTMENT if policy else DEFAULT_RPM_DEPARTMENT
+    return rpm_key, rpm_dept
+
+
+async def _get_or_create_limiter(department: str, session_factory) -> RateLimiter:
+    """Return a per-department in-memory RateLimiter, creating or updating as needed."""
+    rpm_key, rpm_dept = await _get_policy_limits(department, session_factory)
 
     limiter = _limiters.get(department)
     if limiter is None:
@@ -153,12 +255,34 @@ def _get_or_create_limiter_sync(department: str, engine) -> RateLimiter:
     return limiter
 
 
-async def check_rate_limit(key_id: int, department: str, session_factory) -> None:
+# ── Rate limit check entry points ────────────────────────────────────────────
+
+
+async def check_rate_limit(key_id: int, department: str, session_factory, redis_client=None) -> None:
     """Check rate limits for a request. Raises 429 if exceeded.
 
-    Uses per-department in-memory limiters. Checks BEFORE recording
-    so rejected requests are not counted.
+    Uses Redis when available (sliding window with sorted sets).
+    Falls back to per-department in-memory limiters when Redis is
+    unavailable. Checks BEFORE recording so rejected requests are
+    not counted.
     """
+    if redis_client is not None:
+        try:
+            rpm_key, rpm_dept = await _get_policy_limits(department, session_factory)
+            redis_limiter = RedisRateLimiter(redis_client)
+            await redis_limiter.check_and_record(
+                key_id=key_id,
+                department=department,
+                rpm_key=rpm_key,
+                rpm_dept=rpm_dept,
+            )
+            return
+        except HTTPException:
+            raise  # Re-raise 429s
+        except Exception:
+            logger.warning("redis_rate_limit_fallback", department=department)
+            # Fall through to in-memory limiter
+
     limiter = await _get_or_create_limiter(department, session_factory)
     limiter.check(key_id=key_id, department=department)
     limiter.record(key_id=key_id, department=department)

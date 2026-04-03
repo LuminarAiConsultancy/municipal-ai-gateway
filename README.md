@@ -238,11 +238,14 @@ See [CHANGELOG.md](CHANGELOG.md) for release notes and [docs/BLUEPRINT.md](docs/
 - ~~No input validation~~ -- Pydantic schemas on admin endpoints
 - ~~Email or webhook alerts~~ -- configurable via `ALERT_WEBHOOK_URL` and `ALERT_EMAIL`
 
+**Enterprise features (available in v1.1):**
+
+- **Redis-backed rate limiting**: Sliding window rate limiting backed by Redis sorted sets. Rate limits survive gateway restarts and work across multiple instances behind a load balancer. Falls back to in-memory limiting when Redis is unavailable. Configurable via `RATE_LIMIT_REDIS_URL` and `RATE_LIMIT_REQUESTS_PER_MINUTE` env vars.
+- **Per-admin accounts with TOTP MFA**: Individual admin accounts with email, bcrypt password, and RFC 6238 TOTP multi-factor authentication. Compatible with Google Authenticator, Authy, and other TOTP apps. Login flow: email + password → TOTP code → 8-hour JWT session. Sessions stored in Redis for server-side revocation. Bootstrap admin from `ADMIN_EMAIL` and `ADMIN_PASSWORD` env vars. Legacy `GATEWAY_SECRET` auth remains supported for backward compatibility.
+- **LDAP / Active Directory integration**: Optional LDAP authentication for staff. When enabled, staff authenticate with their AD credentials and the gateway auto-provisions API keys. Supports simple bind and STARTTLS. Configure via `LDAP_ENABLED`, `LDAP_SERVER`, `LDAP_BASE_DN`, and related env vars.
+
 **Post-launch improvements:**
 
-- **LDAP / Active Directory integration**: Staff authenticate with gateway-issued API keys only. There is no integration with municipal Active Directory or LDAP, so each staff member needs a manually created key.
-- **Multi-instance rate limiting**: The rate limiter runs in memory and resets when the gateway restarts. Fine for single-server deployments. Larger deployments behind a load balancer would need a shared store like Redis.
-- **MFA for admin dashboard**: The admin dashboard uses a single shared secret. There are no per-administrator accounts or multi-factor authentication.
 - **Copilot proxy support**: The gateway proxies OpenAI, Anthropic, and Google APIs. GitHub Copilot uses a different authentication flow that is not yet supported.
 
 ---

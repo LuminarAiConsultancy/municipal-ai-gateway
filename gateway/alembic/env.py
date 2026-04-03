@@ -26,6 +26,8 @@ if config.config_file_name is not None:
 from models import Base
 from auth import ApiKey  # noqa: F401
 from policies import DepartmentPolicy  # noqa: F401
+from admin_auth import AdminUser  # noqa: F401
+# ldap_auth uses ApiKey model from auth.py (no new models to register)
 
 # RequestLog is defined in main.py. Import it to register with Base.
 from main import RequestLog  # noqa: F401
