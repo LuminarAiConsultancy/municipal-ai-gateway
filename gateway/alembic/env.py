@@ -29,8 +29,9 @@ from policies import DepartmentPolicy  # noqa: F401
 from admin_auth import AdminUser  # noqa: F401
 # ldap_auth uses ApiKey model from auth.py (no new models to register)
 
-# RequestLog is defined in main.py. Import it to register with Base.
+# RequestLog and FailedLogin are defined in main.py. Import to register with Base.
 from main import RequestLog  # noqa: F401
+from main import FailedLogin  # noqa: F401
 
 target_metadata = Base.metadata
 

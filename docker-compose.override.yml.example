@@ -1,0 +1,24 @@
+# docker-compose.override.yml.example
+#
+# Copy this file to docker-compose.override.yml for local development.
+# It exposes database and Redis ports to the host and mounts the gateway
+# source code for live reload. Do NOT use this in production.
+#
+#   cp docker-compose.override.yml.example docker-compose.override.yml
+#   docker compose up -d
+
+services:
+  gateway:
+    volumes:
+      - ./gateway:/app:ro
+    environment:
+      - LOG_LEVEL=debug
+      - LOG_FORMAT=console
+
+  db:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"

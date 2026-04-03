@@ -46,6 +46,25 @@ JWT_TEMP_MINUTES = 10  # Temp token for login flow
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 
+
+def validate_jwt_secret() -> None:
+    """Validate JWT secret meets minimum security requirements.
+
+    Called during application startup. Refuses to start if GATEWAY_SECRET
+    is missing or too short for HS256 signing.
+    """
+    if not JWT_SECRET:
+        raise SystemExit(
+            "FATAL: GATEWAY_SECRET is not set. "
+            "Generate one with: openssl rand -hex 32"
+        )
+    if len(JWT_SECRET) < 32:
+        raise SystemExit(
+            f"FATAL: GATEWAY_SECRET is only {len(JWT_SECRET)} characters. "
+            "Minimum 32 characters required for secure JWT signing. "
+            "Generate one with: openssl rand -hex 32"
+        )
+
 # Redis key prefix for admin sessions
 SESSION_PREFIX = "admin_session:"
 

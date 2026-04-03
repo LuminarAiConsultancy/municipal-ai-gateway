@@ -4,6 +4,7 @@ Accepts incoming AI requests, forwards them to the correct provider,
 logs every request to PostgreSQL, and returns the response.
 """
 
+import asyncio
 import json
 import os
 import pathlib
@@ -58,6 +59,7 @@ from admin_auth import (
     revoke_session,
     require_admin_session,
     bootstrap_admin,
+    validate_jwt_secret,
 )
 
 load_dotenv()
@@ -116,6 +118,16 @@ class RequestLog(Base):
     input_tokens = Column(Integer, default=0)
     output_tokens = Column(Integer, default=0)
     estimated_cost_cents = Column(Integer, default=0)
+
+
+class FailedLogin(Base):
+    __tablename__ = "failed_logins"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime(timezone=True), default=lambda: dt.datetime.now(dt.timezone.utc))
+    source_ip = Column(String(45), nullable=False, index=True)
+    email_attempted = Column(String(256), nullable=False)
+    reason = Column(String(64), nullable=False)  # invalid_credentials, account_inactive, invalid_totp
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -356,8 +368,37 @@ def _log_request_sync(
 
 # ── App lifecycle ─────────────────────────────────────────────────────────────
 
+LOG_RETENTION_DAYS = int(os.getenv("LOG_RETENTION_DAYS", "365"))
+
+
+async def _log_retention_loop(session_factory):
+    """Delete request_logs older than LOG_RETENTION_DAYS. Runs once daily."""
+    while True:
+        try:
+            await asyncio.sleep(86400)  # 24 hours
+            if LOG_RETENTION_DAYS <= 0:
+                continue
+            cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=LOG_RETENTION_DAYS)
+            async with session_factory() as session:
+                result = await session.execute(
+                    text("DELETE FROM request_logs WHERE timestamp < :cutoff"),
+                    {"cutoff": cutoff},
+                )
+                deleted = result.rowcount
+                await session.commit()
+                if deleted:
+                    logger.info("log_retention_cleanup", deleted=deleted, retention_days=LOG_RETENTION_DAYS)
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            logger.error("log_retention_error")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Validate security configuration before anything else
+    validate_jwt_secret()
+
     engine = create_db_engine(DATABASE_URL)
     await init_db(engine)
     session_factory = create_session_factory(engine)
@@ -381,7 +422,11 @@ async def lifespan(app: FastAPI):
     # Bootstrap initial admin account from env vars
     await bootstrap_admin(session_factory)
 
+    # Start log retention background task
+    retention_task = asyncio.create_task(_log_retention_loop(session_factory))
+
     yield
+    retention_task.cancel()
     await app.state.http_client.aclose()
     await close_redis()
     await engine.dispose()
@@ -389,7 +434,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Municipal AI Gateway",
-    version="0.1.0",
+    version="1.1.0",
     lifespan=lifespan,
 )
 
@@ -405,6 +450,24 @@ app.add_middleware(
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Gateway-Key"],
 )
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Add security headers to every response.
+
+    These headers are also set by the reverse proxy (Caddy/nginx), but
+    adding them at the application level ensures protection when the
+    gateway is accessed directly during development or testing.
+    """
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Content-Security-Policy"] = "default-src 'self'"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    return response
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -878,6 +941,93 @@ async def _require_admin_session(request: Request):
     )
 
 
+# ── Admin login rate limiting ────────────────────────────────────────────────
+
+LOGIN_RATE_LIMIT = 10  # max attempts per window
+LOGIN_RATE_WINDOW = 900  # 15 minutes in seconds
+
+# In-memory fallback when Redis is unavailable
+_login_attempts: dict[str, list[float]] = {}
+
+
+async def _check_login_rate_limit(ip: str) -> None:
+    """Block brute force login attempts. 10 attempts per 15 minutes per IP.
+
+    Uses Redis sliding window when available, falls back to in-memory.
+    """
+    import time
+
+    redis_client = getattr(app.state, "redis", None)
+    if redis_client:
+        try:
+            key = f"login_ratelimit:{ip}"
+            now = time.time()
+            pipe = redis_client.pipeline()
+            pipe.zremrangebyscore(key, 0, now - LOGIN_RATE_WINDOW)
+            pipe.zcard(key)
+            results = await pipe.execute()
+            count = results[1]
+
+            if count >= LOGIN_RATE_LIMIT:
+                logger.warning("login_rate_limited", source_ip=ip, attempts=count)
+                raise HTTPException(
+                    status_code=429,
+                    detail="Too many login attempts. Try again in 15 minutes.",
+                )
+            return
+        except HTTPException:
+            raise
+        except Exception:
+            pass  # Fall through to in-memory
+
+    # In-memory fallback
+    now = time.time()
+    attempts = _login_attempts.get(ip, [])
+    attempts = [t for t in attempts if now - t < LOGIN_RATE_WINDOW]
+    _login_attempts[ip] = attempts
+
+    if len(attempts) >= LOGIN_RATE_LIMIT:
+        logger.warning("login_rate_limited", source_ip=ip, attempts=len(attempts))
+        raise HTTPException(
+            status_code=429,
+            detail="Too many login attempts. Try again in 15 minutes.",
+        )
+
+
+async def _record_login_attempt(ip: str) -> None:
+    """Record a failed login attempt for rate limiting."""
+    import time
+
+    redis_client = getattr(app.state, "redis", None)
+    if redis_client:
+        try:
+            key = f"login_ratelimit:{ip}"
+            now = time.time()
+            pipe = redis_client.pipeline()
+            pipe.zadd(key, {f"{now}": now})
+            pipe.expire(key, LOGIN_RATE_WINDOW)
+            await pipe.execute()
+            return
+        except Exception:
+            pass  # Fall through to in-memory
+
+    # In-memory fallback
+    attempts = _login_attempts.get(ip, [])
+    attempts.append(time.time())
+    _login_attempts[ip] = attempts
+
+
+async def _log_failed_login(ip: str, email: str, reason: str) -> None:
+    """Persist a failed login to both the Python logger and the failed_logins table."""
+    logger.warning("admin_login_failed", email=email, source_ip=ip, reason=reason)
+    try:
+        async with app.state.session_factory() as session:
+            session.add(FailedLogin(source_ip=ip, email_attempted=email, reason=reason))
+            await session.commit()
+    except Exception:
+        pass  # Don't block login flow if logging fails
+
+
 # ── Admin auth endpoints ─────────────────────────────────────────────────────
 
 
@@ -890,6 +1040,11 @@ async def admin_login(request: Request):
 
     Body: {"email": "admin@example.com", "password": "..."}
     """
+    source_ip = request.client.host if request.client else "unknown"
+
+    # Brute force protection
+    await _check_login_rate_limit(source_ip)
+
     from pydantic import ValidationError
     try:
         body = AdminLoginRequest(**(await request.json()))
@@ -902,10 +1057,19 @@ async def admin_login(request: Request):
         )
         admin = result.scalars().first()
 
-    if not admin or not admin.is_active:
+    if not admin:
+        await _record_login_attempt(source_ip)
+        await _log_failed_login(source_ip, body.email, "invalid_credentials")
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
+
+    if not admin.is_active:
+        await _record_login_attempt(source_ip)
+        await _log_failed_login(source_ip, body.email, "account_inactive")
         raise HTTPException(status_code=401, detail="Invalid email or password.")
 
     if not verify_password(body.password, admin.password_hash):
+        await _record_login_attempt(source_ip)
+        await _log_failed_login(source_ip, body.email, "invalid_credentials")
         raise HTTPException(status_code=401, detail="Invalid email or password.")
 
     temp_token = create_temp_token(admin.id, admin.email)
@@ -938,24 +1102,34 @@ async def admin_login(request: Request):
 async def admin_totp_setup(request: Request):
     """Generate a TOTP secret and QR code URI for enrollment.
 
-    Requires a valid temp_token from /admin/login.
+    Accepts either a temp_token (from login flow) or a session JWT
+    (Authorization: Bearer header) for in-dashboard enrollment.
 
-    Body: {"temp_token": "..."}
+    Body: {"temp_token": "..."} or {} with Authorization header.
     """
-    from pydantic import ValidationError
     import jwt as pyjwt
-    try:
-        body = AdminTotpSetupRequest(**(await request.json()))
-    except ValidationError as e:
-        raise HTTPException(status_code=422, detail=e.errors())
 
-    try:
-        payload = decode_token(body.temp_token, expected_type="temp")
-    except pyjwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid or expired temp token.")
+    body = await request.json() if await request.body() else {}
+    admin_id = None
+    email = None
 
-    admin_id = payload["sub"]
-    email = payload["email"]
+    # Try temp_token first (login flow)
+    if body.get("temp_token"):
+        try:
+            payload = decode_token(body["temp_token"], expected_type="temp")
+            admin_id = payload["sub"]
+            email = payload["email"]
+        except pyjwt.InvalidTokenError:
+            raise HTTPException(status_code=401, detail="Invalid or expired temp token.")
+
+    # Fall back to session JWT (in-dashboard enrollment)
+    if admin_id is None:
+        try:
+            session_info = await _require_admin_session(request)
+            admin_id = session_info.get("sub")
+            email = session_info.get("email")
+        except HTTPException:
+            raise HTTPException(status_code=401, detail="Authentication required. Provide temp_token or session JWT.")
 
     # Generate and store TOTP secret
     secret = generate_totp_secret()
@@ -969,8 +1143,8 @@ async def admin_totp_setup(request: Request):
         admin.totp_secret = secret
         await session.commit()
 
-    uri = get_totp_uri(secret, email)
-    logger.info("admin_totp_setup", email=email)
+    uri = get_totp_uri(secret, email or admin.email)
+    logger.info("admin_totp_setup", email=email or admin.email)
     return {"secret": secret, "uri": uri}
 
 
@@ -1008,6 +1182,9 @@ async def admin_totp_verify(request: Request):
         raise HTTPException(status_code=400, detail="TOTP not enrolled. Use /admin/totp/setup first.")
 
     if not verify_totp(admin.totp_secret, body.code):
+        source_ip = request.client.host if request.client else "unknown"
+        await _record_login_attempt(source_ip)
+        await _log_failed_login(source_ip, email, "invalid_totp")
         raise HTTPException(status_code=401, detail="Invalid TOTP code.")
 
     # Issue session token

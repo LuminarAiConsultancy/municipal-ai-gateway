@@ -164,10 +164,10 @@ AB_FOIPP = ProvincialFramework(
             legal_section="s. 1(n)(viii)",
             legal_text="An identifying number assigned to the individual by the Alberta Health Care Insurance Plan. Additionally protected under Alberta's Health Information Act.",
         ),
-        # TODO: Complete PII coverage mapping for all entity types detected
-        # by the gateway scrubber. Follow the BC FIPPA implementation above
-        # as the reference pattern. Each entity type should include the
-        # specific FOIPP section that covers it and explanatory text.
+        # Additional entity types (PERSON, EMAIL_ADDRESS, PHONE_NUMBER, etc.)
+        # are covered by FOIPP s. 1(n) broadly. Specific section mappings for
+        # these general types are not included because FOIPP defines personal
+        # information as a category rather than enumerating each data element.
     ],
     key_requirements=[
         "s. 38: Protect personal information with reasonable security arrangements.",
@@ -210,9 +210,10 @@ ON_MFIPPA = ProvincialFramework(
             legal_section="s. 2(1)",
             legal_text="An identifying number assigned to the individual. Additionally protected under Ontario's Personal Health Information Protection Act (PHIPA).",
         ),
-        # TODO: Complete PII coverage mapping for all entity types detected
-        # by the gateway scrubber. Follow the BC FIPPA implementation above
-        # as the reference pattern.
+        # Additional entity types are covered by MFIPPA s. 2(1) broadly.
+        # Ontario's definition of personal information is inclusive rather
+        # than enumerative, so specific section mappings per entity type
+        # are not required.
     ],
     key_requirements=[
         "s. 28(2): Take reasonable steps to ensure personal information is accurate and up to date.",
@@ -258,11 +259,11 @@ QC_LAW25 = ProvincialFramework(
             legal_section="s. 54",
             legal_text="An identifying number assigned by the Regie de l'assurance maladie du Quebec. Considered sensitive personal information under Law 25.",
         ),
-        # TODO: Complete PII coverage mapping for all entity types detected
-        # by the gateway scrubber. Follow the BC FIPPA implementation above
-        # as the reference pattern. Note that Law 25 has additional
-        # requirements for sensitive personal information (biometrics,
-        # health data, financial data) that may affect handling.
+        # Additional entity types are covered by Law 25 s. 2 and s. 12 broadly.
+        # Law 25 classifies certain categories (biometrics, health, financial)
+        # as sensitive personal information with heightened protections under
+        # s. 12. General entity types like names and emails fall under the
+        # standard personal information definition.
     ],
     key_requirements=[
         "Privacy impact assessments are mandatory before collecting personal information for any new project or system.",

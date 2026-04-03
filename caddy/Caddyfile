@@ -1,0 +1,20 @@
+# Municipal AI Gateway — Caddy reverse proxy
+#
+# When DOMAIN is set (e.g. gateway.yourtown.ca), Caddy obtains and renews
+# a Let's Encrypt certificate automatically. No manual cert management.
+#
+# When DOMAIN is empty or "localhost", Caddy serves with an auto-generated
+# self-signed certificate for local development.
+
+{$GATEWAY_DOMAIN:localhost} {
+	reverse_proxy gateway:8080
+
+	header {
+		-Server
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
