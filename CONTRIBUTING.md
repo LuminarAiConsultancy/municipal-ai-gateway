@@ -1,6 +1,6 @@
 # Contributing
 
-The Municipal AI Gateway is an open source project built for Canadian municipalities. Contributions are welcome.
+The Canadian Municipal AI Gateway is an open source project built for Canadian municipalities. Contributions are welcome.
 
 ## Reporting bugs
 

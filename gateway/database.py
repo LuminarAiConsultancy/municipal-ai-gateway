@@ -1,4 +1,4 @@
-"""Async database engine and session factory for the Municipal AI Gateway."""
+"""Async database engine and session factory for the Canadian Municipal AI Gateway."""
 
 import os
 

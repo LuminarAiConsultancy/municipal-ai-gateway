@@ -1,4 +1,4 @@
-"""Redis client for the Municipal AI Gateway.
+"""Redis client for the Canadian Municipal AI Gateway.
 
 Provides a shared Redis connection pool used by:
   - Rate limiter (sliding window counters)

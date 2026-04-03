@@ -1,4 +1,4 @@
-"""Webhook and email alerts for the Municipal AI Gateway.
+"""Webhook and email alerts for the Canadian Municipal AI Gateway.
 
 Sends alerts on:
   - PII spike (many detections in a single request)

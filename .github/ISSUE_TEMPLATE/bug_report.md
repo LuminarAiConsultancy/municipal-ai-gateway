@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Report a bug in the Municipal AI Gateway
+about: Report a bug in the Canadian Municipal AI Gateway
 title: "[BUG] "
 labels: bug
 assignees: ''

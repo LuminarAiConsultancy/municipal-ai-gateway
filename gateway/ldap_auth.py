@@ -1,4 +1,4 @@
-"""LDAP / Active Directory integration for the Municipal AI Gateway.
+"""LDAP / Active Directory integration for the Canadian Municipal AI Gateway.
 
 When enabled (LDAP_ENABLED=true), staff can authenticate with their
 Active Directory credentials instead of manually created API keys.

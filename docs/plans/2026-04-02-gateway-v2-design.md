@@ -1,4 +1,4 @@
-# Municipal AI Gateway v2 — Design Document
+# Canadian Municipal AI Gateway v2 — Design Document
 
 **Date:** 2026-04-02
 **Status:** Approved

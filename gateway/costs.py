@@ -1,4 +1,4 @@
-"""Token extraction and cost estimation for the Municipal AI Gateway.
+"""Token extraction and cost estimation for the Canadian Municipal AI Gateway.
 
 Parses usage data from provider responses (OpenAI, Anthropic, Google)
 and estimates costs based on a per-model pricing table. Falls back to

@@ -1,4 +1,4 @@
-"""Department policy enforcement for the Municipal AI Gateway.
+"""Department policy enforcement for the Canadian Municipal AI Gateway.
 
 Handles rate limiting (Redis-backed with in-memory fallback), model
 allowlisting, and monthly budget enforcement. Policies are stored

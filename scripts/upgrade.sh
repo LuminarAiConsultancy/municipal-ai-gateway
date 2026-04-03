@@ -1,5 +1,5 @@
 #!/bin/sh
-# Upgrade the Municipal AI Gateway to the latest version.
+# Upgrade the Canadian Municipal AI Gateway to the latest version.
 #
 # Usage:
 #   ./scripts/upgrade.sh
@@ -21,7 +21,7 @@ HEALTH_URL="${HEALTH_URL:-https://localhost/health}"
 HEALTH_RETRIES=12
 HEALTH_INTERVAL=5
 
-echo "===== Municipal AI Gateway Upgrade ====="
+echo "===== Canadian Municipal AI Gateway Upgrade ====="
 echo ""
 
 # Step 1: Record current commit for rollback

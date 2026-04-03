@@ -60,7 +60,7 @@ These templates are ready to customize for your municipality. Download them from
 
 | Layer | Covers | Provided by |
 |-------|--------|-------------|
-| **Technical controls** | PII scrubbing, audit logging, rate limiting, cost tracking | Municipal AI Gateway (this repo) |
+| **Technical controls** | PII scrubbing, audit logging, rate limiting, cost tracking | Canadian Municipal AI Gateway (this repo) |
 | **Policy documents** | Acceptable use, briefing notes, PIA templates | Starter Kit (above) |
 | **Governance program** | Decision approvals, regulatory mapping, compliance reporting, commissioner-ready audit trail | [LUMINARYX](https://luminaryx.ca) |
 

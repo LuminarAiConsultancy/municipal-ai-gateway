@@ -1,4 +1,4 @@
-"""Staff API key authentication for the Municipal AI Gateway.
+"""Staff API key authentication for the Canadian Municipal AI Gateway.
 
 Each staff member or department gets an API key. Every proxy request
 must include a valid key in the X-Gateway-Key header. Keys are stored

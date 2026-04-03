@@ -1,4 +1,4 @@
-# Municipal AI Gateway — Caddy reverse proxy
+# Canadian Municipal AI Gateway — Caddy reverse proxy
 #
 # When DOMAIN is set (e.g. gateway.yourtown.ca), Caddy obtains and renews
 # a Let's Encrypt certificate automatically. No manual cert management.

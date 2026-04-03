@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Suggest a feature for the Municipal AI Gateway
+about: Suggest a feature for the Canadian Municipal AI Gateway
 title: "[FEATURE] "
 labels: enhancement
 assignees: ''

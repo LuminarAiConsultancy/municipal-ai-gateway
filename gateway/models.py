@@ -1,4 +1,4 @@
-"""Shared SQLAlchemy base and models for the Municipal AI Gateway."""
+"""Shared SQLAlchemy base and models for the Canadian Municipal AI Gateway."""
 
 from sqlalchemy.orm import declarative_base
 

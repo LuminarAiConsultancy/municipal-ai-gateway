@@ -1,4 +1,4 @@
-"""Structured logging configuration for the Municipal AI Gateway.
+"""Structured logging configuration for the Canadian Municipal AI Gateway.
 
 Uses structlog to produce JSON logs in production (LOG_FORMAT=json)
 and human-readable logs in development (LOG_FORMAT=console).

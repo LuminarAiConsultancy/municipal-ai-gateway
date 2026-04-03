@@ -2,7 +2,7 @@
 
 ## What data the gateway processes
 
-The Municipal AI Gateway acts as a proxy between your organization's staff and external AI providers. It processes:
+The Canadian Municipal AI Gateway acts as a proxy between your organization's staff and external AI providers. It processes:
 
 - AI prompts and responses passing through it
 - API key identifiers (hashed, not plaintext)

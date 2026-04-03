@@ -3,7 +3,7 @@ name: municipal-ai-gateway
 description: Build an open-source AI governance proxy gateway for municipalities and public-sector organizations. Use this skill whenever someone asks to build an AI proxy, AI gateway, AI firewall, AI governance tool, shadow AI monitoring, PII scrubbing proxy, organizational AI usage tracker, or any tool that sits between an organization's users and AI providers (OpenAI, Anthropic, Google, etc.) to enforce policy, strip sensitive data, and create audit trails. Also trigger when someone asks about protecting an organization from ungoverned AI usage, monitoring what staff send to ChatGPT/Copilot/Gemini/Claude, or building a free/open-source AI safety tool for government or enterprise. If the request involves intercepting, logging, scrubbing, or governing AI API traffic at the organizational level, use this skill. Even if the person just says "AI firewall" or "shadow AI problem" or "staff using ChatGPT without oversight", this skill applies.
 ---
 
-# Municipal AI Gateway
+# Canadian Municipal AI Gateway
 
 An open-source proxy gateway that sits between an organization's network and external AI providers. It intercepts every AI request, strips personally identifiable information before it leaves the building, enforces usage policies, logs everything to a tamper-evident audit trail, and gives administrators a real-time dashboard showing all AI activity across the organization.
 
@@ -824,7 +824,7 @@ Only aggregate statistics, never content. Specifically:
 
 **Implementation:**
 
-- **Opt-in toggle** in the admin dashboard settings. Off by default. Clearly labeled: "Share anonymized usage statistics with the Municipal AI Gateway community."
+- **Opt-in toggle** in the admin dashboard settings. Off by default. Clearly labeled: "Share anonymized usage statistics with the Canadian Municipal AI Gateway community."
 - **Transparency page** in the dashboard showing exactly what data is being shared, with a preview of the next scheduled submission.
 - **Collection endpoint:** A simple HTTPS API hosted at a neutral domain (e.g., `benchmarks.municipal-ai-gateway.org`). The gateway posts a JSON payload of aggregate stats weekly. The endpoint stores only the aggregated data, never raw logs.
 - **Privacy commitment:** The benchmarking service must be documented with its own PIA. The data shared must be provably non-re-identifiable (size brackets, not exact counts; province, not municipality name). Publish the server-side code as open source so municipalities can verify what happens with their data.

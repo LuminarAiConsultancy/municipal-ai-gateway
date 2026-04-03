@@ -1,4 +1,4 @@
-# Municipal AI Gateway — Production Deployment Guide
+# Canadian Municipal AI Gateway — Production Deployment Guide
 
 ## Prerequisites
 

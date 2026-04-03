@@ -1,4 +1,4 @@
-"""Shared test fixtures for the Municipal AI Gateway test suite.
+"""Shared test fixtures for the Canadian Municipal AI Gateway test suite.
 
 Requirements:
   - Python packages: pytest, httpx, respx, fastapi, sqlalchemy,

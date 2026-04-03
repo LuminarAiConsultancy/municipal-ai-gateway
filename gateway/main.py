@@ -1,4 +1,4 @@
-"""Municipal AI Gateway — proxy core.
+"""Canadian Municipal AI Gateway — proxy core.
 
 Accepts incoming AI requests, forwards them to the correct provider,
 logs every request to PostgreSQL, and returns the response.
@@ -433,7 +433,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Municipal AI Gateway",
+    title="Canadian Municipal AI Gateway",
     version="1.1.0",
     lifespan=lifespan,
 )

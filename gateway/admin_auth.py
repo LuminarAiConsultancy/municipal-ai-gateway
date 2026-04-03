@@ -1,4 +1,4 @@
-"""Per-admin accounts with TOTP MFA for the Municipal AI Gateway.
+"""Per-admin accounts with TOTP MFA for the Canadian Municipal AI Gateway.
 
 Replaces the single shared GATEWAY_SECRET with individual admin accounts.
 Each admin has: email, bcrypt password, optional TOTP secret.
@@ -111,7 +111,7 @@ def generate_totp_secret() -> str:
 def get_totp_uri(secret: str, email: str) -> str:
     """Generate a provisioning URI for QR code scanning."""
     totp = pyotp.TOTP(secret)
-    return totp.provisioning_uri(name=email, issuer_name="Municipal AI Gateway")
+    return totp.provisioning_uri(name=email, issuer_name="Canadian Municipal AI Gateway")
 
 
 def verify_totp(secret: str, code: str) -> bool:

@@ -1,4 +1,4 @@
-# Municipal AI Gateway
+# Canadian Municipal AI Gateway
 
 > Open-source AI governance proxy gateway for Canadian municipalities and public sector organizations.
 
@@ -12,7 +12,7 @@ In a 2025 KPMG Canada survey, nearly half of Canadian public servants reported u
 
 Blocking AI tools does not work. Staff use personal phones and personal accounts. You lose all visibility and productivity suffers.
 
-The Municipal AI Gateway is a third option.
+The Canadian Municipal AI Gateway is a third option.
 
 ---
 

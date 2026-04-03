@@ -1,6 +1,6 @@
 # From Detection to Governance
 
-The Municipal AI Gateway shows you what's happening. It doesn't tell you what to do about it.
+The Canadian Municipal AI Gateway shows you what's happening. It doesn't tell you what to do about it.
 
 ---
 

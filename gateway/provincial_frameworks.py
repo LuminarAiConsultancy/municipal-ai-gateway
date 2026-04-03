@@ -1,4 +1,4 @@
-"""Provincial privacy law framework mapping for the Municipal AI Gateway.
+"""Provincial privacy law framework mapping for the Canadian Municipal AI Gateway.
 
 Maps Canadian provincial privacy legislation to specific PII categories
 detected by the gateway's scrubber. Each framework defines which PII types
