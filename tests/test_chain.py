@@ -1,13 +1,11 @@
 """Tests for the SHA-256 hash-chained audit trail.
 
-Chain functions (_compute_chain_hash, _log_request) live in gateway/main.py.
-There is no separate gateway/chain.py — if one is created later, update the
-imports below.
+Chain functions (_compute_chain_hash, _log_request_sync) live in gateway/main.py.
 """
 
 from sqlalchemy.orm import Session
 
-from main import _compute_chain_hash, _log_request, RequestLog
+from main import _compute_chain_hash, _log_request_sync, RequestLog
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -38,9 +36,9 @@ LOG_DEFAULTS = dict(
 
 
 def _insert_entries(db_engine, count=3):
-    """Insert *count* valid chain entries via _log_request."""
+    """Insert *count* valid chain entries via _log_request_sync."""
     for i in range(count):
-        _log_request(
+        _log_request_sync(
             db_engine,
             path=f"v1/test/{i}",
             request_body=f'{{"n": {i}}}'.encode(),
@@ -60,10 +58,10 @@ class TestChainHashComputation:
 
     def test_two_entries_chain_links(self, db_engine):
         """Second entry's previous_hash equals first entry's chain_hash."""
-        _log_request(db_engine, path="v1/first", **{
+        _log_request_sync(db_engine, path="v1/first", **{
             k: v for k, v in LOG_DEFAULTS.items() if k != "path"
         })
-        _log_request(db_engine, path="v1/second", **{
+        _log_request_sync(db_engine, path="v1/second", **{
             k: v for k, v in LOG_DEFAULTS.items() if k != "path"
         })
 

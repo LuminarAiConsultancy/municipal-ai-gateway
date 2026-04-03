@@ -123,10 +123,10 @@ curl -k https://localhost/health
 The `-k` flag tells curl to accept the self-signed certificate. Expected response:
 
 ```json
-{"status": "ok"}
+{"status": "ok", "checks": {"database": "ok", "scrubber": "ok"}}
 ```
 
-Or open `https://localhost/health` in your browser. Your browser will warn about the self-signed certificate. Click through the warning (this is expected for local testing). If you see `{"status":"ok"}`, the gateway is running with HTTPS.
+Or open `https://localhost/health` in your browser. Your browser will warn about the self-signed certificate. Click through the warning (this is expected for local testing). If you see both checks as `"ok"`, the gateway is running with HTTPS.
 
 HTTP requests to `http://localhost` are automatically redirected to HTTPS. Port 8080 is also available for direct HTTP access during testing.
 
@@ -197,29 +197,52 @@ The person who built this gateway sat on municipal council. Not as an observer o
 
 ## Project status
 
-Beta. Suitable for pilot deployments with IT support. Contributions welcome.
+**v0.1.0** | All tests passing | Docker ready
 
-See [docs/BLUEPRINT.md](docs/BLUEPRINT.md) for the full product specification, competitive landscape analysis, and architecture decisions.
+See [CHANGELOG.md](CHANGELOG.md) for release notes and [docs/BLUEPRINT.md](docs/BLUEPRINT.md) for the full product specification.
+
+### What's included in v0.1.0
+
+- Async database layer (PostgreSQL via asyncpg)
+- CORS lockdown with configurable origins
+- Per-department rate limiters with check-before-record semantics
+- SHA-256 API key hashing (plaintext keys no longer stored)
+- SSE streaming proxy support
+- Structured JSON logging with request correlation IDs
+- Pydantic input validation on admin endpoints
+- Enhanced health check (database + scrubber status)
+- O(1) memory audit chain verification
+- Paginated request log with filtering and CSV/JSON export
+- Graceful scrubber failure handling (fail_closed/fail_open)
+- Optional French PII detection (bilingual support)
+- Webhook and email alert framework
+- Docker log rotation
+- Token estimation fallback when providers don't return usage data
 
 ---
 
 ## What is not built yet
 
-This is an honest accounting of what the README describes versus what the code delivers today.
+**Resolved in v0.1.0:**
 
-**Before-pilot blockers:**
-
-- ~~**HTTPS/TLS termination**~~: Resolved. The gateway now includes an nginx reverse proxy that terminates TLS on port 443 with automatic self-signed certificate generation. See the setup guide for instructions on replacing with a production certificate.
-- ~~**Dashboard policy management**~~: Resolved. The admin dashboard at `/dashboard` now includes a Department Policies panel for viewing, creating, and editing department policies (rate limits, model allowlists, budget caps).
-- ~~**Provincial privacy law mapping**~~: Partially resolved. The `/frameworks` endpoint now returns the active provincial framework when `PROVINCE` is set in `.env`. BC FIPPA is fully mapped with PII type coverage, legal sections, and retention periods. Alberta FOIPP, Ontario MFIPPA, and Quebec Law 25 have framework structure and key requirements but incomplete PII coverage mapping.
-- ~~**Database migrations**~~: Resolved. Alembic migrations run automatically on `docker compose up`. Schema changes are version-controlled and applied without manual SQL.
+- ~~HTTPS/TLS termination~~ -- nginx reverse proxy with self-signed cert
+- ~~Dashboard policy management~~ -- full CRUD at `/dashboard`
+- ~~Provincial privacy law mapping~~ -- BC FIPPA fully mapped; AB, ON, QC partially mapped
+- ~~Database migrations~~ -- Alembic runs on `docker compose up`
+- ~~CORS wide open~~ -- configurable `CORS_ORIGINS` env var
+- ~~Rate limiter race condition~~ -- per-department limiters, check before record
+- ~~Plaintext API keys~~ -- SHA-256 hashed, migration script provided
+- ~~No streaming support~~ -- SSE streaming with PII scrubbing
+- ~~No structured logging~~ -- structlog JSON output with correlation IDs
+- ~~Health check trivial~~ -- checks database and scrubber status
+- ~~No input validation~~ -- Pydantic schemas on admin endpoints
+- ~~Email or webhook alerts~~ -- configurable via `ALERT_WEBHOOK_URL` and `ALERT_EMAIL`
 
 **Post-launch improvements:**
 
 - **LDAP / Active Directory integration**: Staff authenticate with gateway-issued API keys only. There is no integration with municipal Active Directory or LDAP, so each staff member needs a manually created key.
 - **Multi-instance rate limiting**: The rate limiter runs in memory and resets when the gateway restarts. Fine for single-server deployments. Larger deployments behind a load balancer would need a shared store like Redis.
 - **MFA for admin dashboard**: The admin dashboard uses a single shared secret. There are no per-administrator accounts or multi-factor authentication.
-- **Email or webhook alerts**: No automated notifications when PII is detected, a budget cap is approached, or the audit chain fails verification. Administrators must check the dashboard.
 - **Copilot proxy support**: The gateway proxies OpenAI, Anthropic, and Google APIs. GitHub Copilot uses a different authentication flow that is not yet supported.
 
 ---

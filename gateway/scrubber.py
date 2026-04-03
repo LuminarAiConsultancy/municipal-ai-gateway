@@ -8,6 +8,7 @@ for names and addresses.
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 
@@ -413,9 +414,15 @@ class Scrubber:
     """Orchestrates PII detection (Presidio + custom Canadian recognizers) and replacement."""
 
     def __init__(self) -> None:
+        models = [{"lang_code": "en", "model_name": "en_core_web_lg"}]
+
+        self._french_enabled = os.getenv("ENABLE_FRENCH_NLP", "").lower() == "true"
+        if self._french_enabled:
+            models.append({"lang_code": "fr", "model_name": "fr_core_news_lg"})
+
         nlp_config = {
             "nlp_engine_name": "spacy",
-            "models": [{"lang_code": "en", "model_name": "en_core_web_lg"}],
+            "models": models,
         }
         nlp_engine = NlpEngineProvider(nlp_configuration=nlp_config).create_engine()
 
@@ -472,6 +479,20 @@ class Scrubber:
             language="en",
             score_threshold=score_threshold,
         )
+
+        # Run French NLP model and merge detections if enabled.
+        if self._french_enabled:
+            fr_results = self._analyzer.analyze(
+                text=text,
+                entities=self._entities,
+                language="fr",
+                score_threshold=score_threshold,
+            )
+            # Merge, keeping higher-scoring result for overlapping spans.
+            existing_spans = {(r.start, r.end, r.entity_type) for r in results}
+            for fr in fr_results:
+                if (fr.start, fr.end, fr.entity_type) not in existing_spans:
+                    results.append(fr)
 
         if not results:
             return ScrubResult(text=text)

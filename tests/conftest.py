@@ -2,14 +2,16 @@
 
 Requirements:
   - Python packages: pytest, httpx, respx, fastapi, sqlalchemy,
-    presidio-analyzer, presidio-anonymizer, spacy
+    presidio-analyzer, presidio-anonymizer, spacy, aiosqlite
   - spacy model: python -m spacy download en_core_web_lg
 
-All tests use an in-memory SQLite database (no Docker or PostgreSQL needed).
+All tests use a file-based SQLite database (no Docker or PostgreSQL needed).
+A sync engine is used for data setup/assertions; an async engine powers the app.
 """
 
 import os
 import sys
+import tempfile
 
 # ── Environment (must be set before any gateway imports) ─────────────────────
 
@@ -17,7 +19,7 @@ os.environ.setdefault("GATEWAY_SECRET", "test-secret")
 os.environ.setdefault("OPENAI_API_KEY", "test-openai-key")
 os.environ.setdefault("ANTHROPIC_API_KEY", "test-anthropic-key")
 os.environ.setdefault("GOOGLE_API_KEY", "test-google-key")
-os.environ.setdefault("DATABASE_URL", "sqlite://")
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite://")
 
 # Add gateway/ to sys.path so bare imports (from models import Base) work.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "gateway"))
@@ -28,9 +30,10 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from models import Base
-from auth import ApiKey, generate_key
+from auth import ApiKey, generate_key, hash_key
 
 # Import main so that RequestLog is registered on Base before create_all().
 from main import RequestLog  # noqa: F401
@@ -40,45 +43,74 @@ from main import RequestLog  # noqa: F401
 
 
 @pytest.fixture
-def db_engine():
-    """In-memory SQLite engine with all tables created.
+def db_engine(tmp_path):
+    """File-based SQLite engine for tests.
 
-    Uses StaticPool so every Session(engine) shares the same connection,
-    making data visible across the app and the test code.
+    Creates both a sync engine (for data setup/assertions) and an async
+    engine (for the app). Both share the same database file.
     """
-    engine = create_engine(
-        "sqlite://",
+    db_path = tmp_path / "test.db"
+
+    # Sync engine for test data setup.
+    sync_engine = create_engine(
+        f"sqlite:///{db_path}",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    Base.metadata.create_all(engine)
-    yield engine
-    Base.metadata.drop_all(engine)
-    engine.dispose()
+    Base.metadata.create_all(sync_engine)
+
+    # Store async engine info for test_client fixture.
+    sync_engine._test_db_path = str(db_path)
+
+    yield sync_engine
+
+    Base.metadata.drop_all(sync_engine)
+    sync_engine.dispose()
 
 
 @pytest.fixture
 def db_session(db_engine):
-    """SQLAlchemy session bound to the in-memory test database."""
+    """SQLAlchemy session bound to the test database."""
     with Session(db_engine) as session:
         yield session
 
 
 @pytest.fixture
 def test_client(db_engine, monkeypatch):
-    """FastAPI TestClient with the test database injected via monkeypatch.
+    """FastAPI TestClient with the async test database injected.
 
-    Replaces main._init_db so the app lifespan uses our in-memory SQLite
-    engine instead of connecting to PostgreSQL.
+    Patches the lifespan to use an async SQLite engine backed by the
+    same database file as db_engine.
     """
     import main
+    from contextlib import asynccontextmanager
 
-    monkeypatch.setattr(main, "_init_db", lambda: db_engine)
+    db_path = db_engine._test_db_path
+
+    @asynccontextmanager
+    async def test_lifespan(app):
+        async_engine = create_async_engine(
+            f"sqlite+aiosqlite:///{db_path}",
+            connect_args={"check_same_thread": False},
+        )
+        session_factory = async_sessionmaker(async_engine, expire_on_commit=False)
+        app.state.engine = async_engine
+        app.state.session_factory = session_factory
+        app.state.http_client = __import__("httpx").AsyncClient(timeout=120.0)
+        app.state.scrubber = __import__("scrubber").get_scrubber()
+        yield
+        await app.state.http_client.aclose()
+        await async_engine.dispose()
+
+    original_lifespan = main.app.router.lifespan_context
+    main.app.router.lifespan_context = test_lifespan
 
     from fastapi.testclient import TestClient
 
     with TestClient(main.app) as client:
         yield client
+
+    main.app.router.lifespan_context = original_lifespan
 
 
 @pytest.fixture
@@ -98,6 +130,8 @@ def valid_api_key(db_engine):
         session.add(
             ApiKey(
                 key=raw_key,
+                key_hash=hash_key(raw_key),
+                key_prefix=raw_key[:8],
                 department="Planning",
                 description="Test user - Planning Dept",
                 active=True,
