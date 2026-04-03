@@ -1,11 +1,15 @@
 services:
-  nginx:
-    build: ./nginx
+  caddy:
+    build: ./caddy
     ports:
       - "443:443"
       - "80:80"
+    environment:
+      GATEWAY_DOMAIN: ${GATEWAY_DOMAIN:-localhost}
+      CADDY_TLS_EMAIL: ${CADDY_TLS_EMAIL:-}
     volumes:
-      - certs:/etc/nginx/ssl
+      - caddy_data:/data
+      - caddy_config:/config
     depends_on:
       - gateway
     restart: unless-stopped
@@ -22,6 +26,7 @@ services:
     env_file: .env
     volumes:
       - ./dashboard:/app/dashboard:ro
+      - ./gateway/scrubbing_rules.yaml:/app/scrubbing_rules.yaml:ro
     depends_on:
       db:
         condition: service_healthy
@@ -55,7 +60,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-gateway}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       POSTGRES_DB: ${POSTGRES_DB:-ai_gateway}
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -71,7 +76,34 @@ services:
         max-size: "50m"
         max-file: "5"
 
+  backup:
+    image: postgres:16-alpine
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-gateway}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      PGDATABASE: ${POSTGRES_DB:-ai_gateway}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+    volumes:
+      - backups:/backups
+      - ./scripts:/scripts:ro
+    entrypoint: /bin/sh
+    command: >
+      -c 'echo "0 2 * * * /scripts/backup-cron.sh >> /var/log/backup.log 2>&1" | crontab -
+      && crond -f -l 2'
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 volumes:
   pgdata:
   redisdata:
-  certs:
+  caddy_data:
+  caddy_config:
+  backups:

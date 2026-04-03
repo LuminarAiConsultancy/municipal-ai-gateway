@@ -11,6 +11,10 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
+
+import structlog
+import yaml
 
 from presidio_analyzer import (
     AnalyzerEngine,
@@ -413,7 +417,9 @@ def get_scrubber() -> Scrubber:
 class Scrubber:
     """Orchestrates PII detection (Presidio + custom Canadian recognizers) and replacement."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, custom_rules_path: str | None = None) -> None:
+        self._log = structlog.get_logger()
+        self._custom_rules_path = custom_rules_path
         models = [{"lang_code": "en", "model_name": "en_core_web_lg"}]
 
         self._french_enabled = os.getenv("ENABLE_FRENCH_NLP", "").lower() == "true"
@@ -461,6 +467,49 @@ class Scrubber:
             "EMAIL_ADDRESS",
             "PERSON",
         ]
+
+        self._load_custom_rules()
+
+    # ── Custom YAML rules ─────────────────────────────────────────────────
+
+    def _load_custom_rules(self) -> None:
+        """Load custom PII rules from scrubbing_rules.yaml."""
+        path = Path(self._custom_rules_path) if self._custom_rules_path else Path("scrubbing_rules.yaml")
+        if not path.exists():
+            self._log.info("custom_rules_file_not_found", path=str(path))
+            return
+
+        try:
+            raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except Exception:
+            self._log.warning("custom_rules_parse_error", path=str(path), exc_info=True)
+            return
+
+        rules = (raw or {}).get("custom_rules") or []
+        for rule in rules:
+            name = rule.get("name", "UNKNOWN")
+            if not rule.get("enabled", True):
+                self._log.info("custom_rule_disabled", name=name)
+                continue
+
+            pattern_str = rule.get("pattern", "")
+            try:
+                re.compile(pattern_str)
+            except re.error:
+                self._log.warning("custom_rule_invalid_regex", name=name, pattern=pattern_str)
+                continue
+
+            replacement = rule.get("replacement", "[PII REMOVED]")
+
+            recognizer = PatternRecognizer(
+                supported_entity=name,
+                supported_language="en",
+                patterns=[Pattern(name, pattern_str, 0.7)],
+            )
+            self._analyzer.registry.add_recognizer(recognizer)
+            self._entities.append(name)
+            PLACEHOLDER_MAP[name] = replacement
+            self._log.info("custom_rule_loaded", name=name)
 
     # ── Public API ────────────────────────────────────────────────────────
 

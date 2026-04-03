@@ -81,25 +81,31 @@ Ports 443 (HTTPS) and 80 (HTTP redirect) must be available on the host machine. 
 ### Clone and configure
 
 ```bash
-git clone https://github.com/LuminarAiConsultancy/municipal-ai-gateway.git
+git clone --branch v1.1.0 https://github.com/LuminarAiConsultancy/municipal-ai-gateway.git
 cd municipal-ai-gateway
 cp .env.example .env
 ```
+
+> **Important:** Always install from a tagged release (e.g. `v1.1.0`), not from `main`. The main branch may contain work in progress. See the [Releases](https://github.com/LuminarAiConsultancy/municipal-ai-gateway/releases) page for the latest stable version.
 
 Open `.env` in any text editor and fill in your values. Here is every variable the gateway uses:
 
 | Variable | Required? | What it is |
 |----------|-----------|------------|
-| `GATEWAY_SECRET` | **Yes** | A random string that protects the admin dashboard and admin API. Generate one by running `openssl rand -hex 32` in your terminal. |
-| `POSTGRES_PASSWORD` | **Yes** | The database password. Change this from the default. Any strong password works. |
+| `GATEWAY_SECRET` | **Yes** | A random string that protects the admin dashboard and admin API. Minimum 32 characters. Generate one by running `openssl rand -hex 32` in your terminal. |
+| `POSTGRES_PASSWORD` | **Yes** | The database password. Any strong password works. |
 | `OPENAI_API_KEY` | If using OpenAI | Your organization's OpenAI API key from [platform.openai.com/api-keys](https://platform.openai.com/api-keys). Only needed if staff use ChatGPT or OpenAI tools. |
 | `ANTHROPIC_API_KEY` | If using Anthropic | Your organization's Anthropic API key from [console.anthropic.com](https://console.anthropic.com). Only needed if staff use Claude. |
 | `GOOGLE_API_KEY` | If using Google | Your organization's Google AI API key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey). Only needed if staff use Gemini. |
+| `GATEWAY_DOMAIN` | No | Your server's public hostname (e.g. `gateway.yourtown.ca`). When set, Caddy obtains a Let's Encrypt certificate automatically. Default is `localhost`. |
+| `CADDY_TLS_EMAIL` | No | Email for Let's Encrypt certificate notifications. Recommended for production. |
 | `POSTGRES_USER` | No | Database username. Default is `gateway`. Leave it unless your IT policies require a specific name. |
 | `POSTGRES_DB` | No | Database name. Default is `ai_gateway`. Leave it unless you have a reason to change it. |
 | `DATABASE_URL` | No | Full database connection string. If you changed `POSTGRES_PASSWORD`, update the password in this URL to match. Otherwise leave the default. |
 | `GATEWAY_PORT` | No | Port the gateway listens on. Default is `8080`. Change only if that port is already in use. |
 | `LOG_LEVEL` | No | How much detail appears in logs. Default is `info`. Set to `debug` only when troubleshooting. |
+| `LOG_RETENTION_DAYS` | No | Number of days to keep request logs. Default is `365`. Set to match your municipality's records retention schedule. |
+| `BACKUP_RETENTION_DAYS` | No | Number of days to keep daily database backups. Default is `30`. |
 | `PROVINCE` | No | Your province code: `BC`, `AB`, `ON`, or `QC`. When set, the gateway maps PII detections to your province's privacy law and the `/frameworks` endpoint returns the active legal framework. |
 
 You need at least one AI provider API key configured. Most organizations start with OpenAI.
@@ -120,49 +126,36 @@ Check the health endpoint from your terminal:
 curl -k https://localhost/health
 ```
 
-The `-k` flag tells curl to accept the self-signed certificate. Expected response:
+The `-k` flag tells curl to accept Caddy's local certificate. Expected response:
 
 ```json
 {"status": "ok", "checks": {"database": "ok", "scrubber": "ok"}}
 ```
 
-Or open `https://localhost/health` in your browser. Your browser will warn about the self-signed certificate. Click through the warning (this is expected for local testing). If you see both checks as `"ok"`, the gateway is running with HTTPS.
+Or open `https://localhost/health` in your browser. Your browser will warn about the certificate on localhost. Click through the warning (this is expected for local testing). If you see both checks as `"ok"`, the gateway is running with HTTPS.
 
 HTTP requests to `http://localhost` are automatically redirected to HTTPS. Port 8080 is also available for direct HTTP access during testing.
 
-The admin dashboard is at `https://localhost/dashboard`. Enter your `GATEWAY_SECRET` value as the admin secret when prompted.
+The admin dashboard is at `https://localhost/admin`. Log in with your admin email and password.
 
-### Replace the self-signed certificate for production
+### Production TLS with Let's Encrypt
 
-The gateway ships with an auto-generated self-signed certificate for local testing. Before deploying to production, replace it with a real certificate from Let's Encrypt or your organization's certificate authority.
-
-**Option A: Let's Encrypt (recommended for internet-facing servers)**
-
-Stop the gateway, then run certbot on the host machine:
+The gateway uses [Caddy](https://caddyserver.com) as its reverse proxy. When you set the `GATEWAY_DOMAIN` variable in your `.env` file to your server's public hostname, Caddy automatically obtains and renews a Let's Encrypt certificate. No manual cert management is required.
 
 ```bash
-docker compose down
-sudo certbot certonly --standalone -d your-domain.ca
+# In your .env file, set:
+GATEWAY_DOMAIN=gateway.yourtown.ca
 ```
 
-Copy the certificate files into the gateway's certificate volume:
+Then restart:
 
 ```bash
 docker compose up -d
-docker compose cp /etc/letsencrypt/live/your-domain.ca/fullchain.pem nginx:/etc/nginx/ssl/cert.pem
-docker compose cp /etc/letsencrypt/live/your-domain.ca/privkey.pem nginx:/etc/nginx/ssl/key.pem
-docker compose restart nginx
 ```
 
-**Option B: Your own certificate authority**
+Caddy will obtain a certificate within seconds. Renewals happen automatically before expiry. Your server must be reachable on ports 80 and 443 from the internet for Let's Encrypt validation.
 
-If your municipality issues its own certificates, copy the `.pem` files into the running nginx container:
-
-```bash
-docker compose cp your-cert.pem nginx:/etc/nginx/ssl/cert.pem
-docker compose cp your-key.pem nginx:/etc/nginx/ssl/key.pem
-docker compose restart nginx
-```
+If your municipality uses its own certificate authority and cannot use Let's Encrypt, see the [Caddy documentation on custom certificates](https://caddyserver.com/docs/caddyfile/directives/tls).
 
 ### Point staff at it
 
@@ -197,56 +190,37 @@ The person who built this gateway sat on municipal council. Not as an observer o
 
 ## Project status
 
-**v0.1.0** | All tests passing | Docker ready
+**v1.1.0** | All tests passing | Docker ready | Production hardened
 
-See [CHANGELOG.md](CHANGELOG.md) for release notes and [docs/BLUEPRINT.md](docs/BLUEPRINT.md) for the full product specification.
+See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
-### What's included in v0.1.0
+### What's included
 
-- Async database layer (PostgreSQL via asyncpg)
-- CORS lockdown with configurable origins
-- Per-department rate limiters with check-before-record semantics
-- SHA-256 API key hashing (plaintext keys no longer stored)
-- SSE streaming proxy support
-- Structured JSON logging with request correlation IDs
-- Pydantic input validation on admin endpoints
-- Enhanced health check (database + scrubber status)
-- O(1) memory audit chain verification
-- Paginated request log with filtering and CSV/JSON export
-- Graceful scrubber failure handling (fail_closed/fail_open)
-- Optional French PII detection (bilingual support)
-- Webhook and email alert framework
-- Docker log rotation
-- Token estimation fallback when providers don't return usage data
+**Core (v1.0.0):**
+- OpenAI, Anthropic, and Google AI API proxying
+- Canadian PII scrubbing (SIN, provincial health numbers, postal codes, phone numbers, email, names)
+- Hash-chained tamper-evident audit trail
+- API key authentication per staff member
+- PostgreSQL request logging with CSV/JSON export
+- SSE streaming proxy with PII scrubbing
+- Structured JSON logging with correlation IDs
+- Docker Compose single-command deployment
 
----
+**v1.1.0:**
+- Redis-backed sliding window rate limiting
+- Per-administrator accounts with TOTP multi-factor authentication
+- LDAP / Active Directory integration for staff API key auto-provisioning
+- Automated TLS via Caddy and Let's Encrypt
+- Daily PostgreSQL backups with 30-day retention
+- Admin dashboard at `/admin`
+- HTTP security headers on all responses
+- Login brute force protection with failed login audit logging
+- JWT secret validation on startup
+- Database connection pooling with configurable limits
+- Log retention policy (configurable via `LOG_RETENTION_DAYS`)
 
-## What is not built yet
-
-**Resolved in v0.1.0:**
-
-- ~~HTTPS/TLS termination~~ -- nginx reverse proxy with self-signed cert
-- ~~Dashboard policy management~~ -- full CRUD at `/dashboard`
-- ~~Provincial privacy law mapping~~ -- BC FIPPA fully mapped; AB, ON, QC partially mapped
-- ~~Database migrations~~ -- Alembic runs on `docker compose up`
-- ~~CORS wide open~~ -- configurable `CORS_ORIGINS` env var
-- ~~Rate limiter race condition~~ -- per-department limiters, check before record
-- ~~Plaintext API keys~~ -- SHA-256 hashed, migration script provided
-- ~~No streaming support~~ -- SSE streaming with PII scrubbing
-- ~~No structured logging~~ -- structlog JSON output with correlation IDs
-- ~~Health check trivial~~ -- checks database and scrubber status
-- ~~No input validation~~ -- Pydantic schemas on admin endpoints
-- ~~Email or webhook alerts~~ -- configurable via `ALERT_WEBHOOK_URL` and `ALERT_EMAIL`
-
-**Enterprise features (available in v1.1):**
-
-- **Redis-backed rate limiting**: Sliding window rate limiting backed by Redis sorted sets. Rate limits survive gateway restarts and work across multiple instances behind a load balancer. Falls back to in-memory limiting when Redis is unavailable. Configurable via `RATE_LIMIT_REDIS_URL` and `RATE_LIMIT_REQUESTS_PER_MINUTE` env vars.
-- **Per-admin accounts with TOTP MFA**: Individual admin accounts with email, bcrypt password, and RFC 6238 TOTP multi-factor authentication. Compatible with Google Authenticator, Authy, and other TOTP apps. Login flow: email + password → TOTP code → 8-hour JWT session. Sessions stored in Redis for server-side revocation. Bootstrap admin from `ADMIN_EMAIL` and `ADMIN_PASSWORD` env vars. Legacy `GATEWAY_SECRET` auth remains supported for backward compatibility.
-- **LDAP / Active Directory integration**: Optional LDAP authentication for staff. When enabled, staff authenticate with their AD credentials and the gateway auto-provisions API keys. Supports simple bind and STARTTLS. Configure via `LDAP_ENABLED`, `LDAP_SERVER`, `LDAP_BASE_DN`, and related env vars.
-
-**Post-launch improvements:**
-
-- **Copilot proxy support**: The gateway proxies OpenAI, Anthropic, and Google APIs. GitHub Copilot uses a different authentication flow that is not yet supported.
+**Not yet built:**
+- GitHub Copilot proxy support (uses a different authentication flow)
 
 ---
 
@@ -462,6 +436,205 @@ match your municipality's records retention schedule.
 
 Contact joy@luminaryx.ca for deployment support, firewall rule
 templates, or Intune configuration guidance.
+
+---
+
+## Backups and restore
+
+The gateway runs a daily automated backup of the PostgreSQL database at 2:00 AM. Backups are gzip-compressed SQL files stored in a Docker volume. The last 30 days are kept by default (configurable via `BACKUP_RETENTION_DAYS`).
+
+### On-demand backup
+
+```bash
+./scripts/backup-now.sh
+```
+
+This creates a timestamped backup file (e.g. `ai_gateway_20260403_143200.sql.gz`) in your current directory.
+
+### Restore from backup
+
+```bash
+./scripts/restore.sh ai_gateway_20260403_143200.sql.gz
+```
+
+The script stops the gateway, restores the database, and restarts the gateway. It prompts for confirmation before overwriting data.
+
+### List automated backups
+
+```bash
+docker compose exec backup ls -lh /backups/
+```
+
+---
+
+## Upgrading
+
+To upgrade to a new version:
+
+```bash
+./scripts/upgrade.sh
+```
+
+The upgrade script:
+
+1. Backs up the database (saved as `pre_upgrade_<timestamp>.sql.gz`)
+2. Pulls the latest tagged release from git
+3. Rebuilds Docker containers
+4. Runs database migrations automatically
+5. Verifies the health check passes
+6. **Rolls back automatically** if the health check fails
+
+If something goes wrong, the gateway reverts to the previous version and preserves the backup file for manual investigation.
+
+---
+
+## What gets logged
+
+Every request that passes through the gateway is recorded in PostgreSQL with a tamper-evident hash chain. No request content is stored — only metadata.
+
+Here is what a single audit log entry looks like when retrieved from `GET /admin/requests`:
+
+```json
+{
+  "id": 4217,
+  "timestamp": "2026-04-03T14:32:07.881Z",
+  "provider": "openai",
+  "method": "POST",
+  "path": "/v1/openai/v1/chat/completions",
+  "response_status": 200,
+  "source_ip": "10.0.1.42",
+  "duration_ms": 1823,
+  "pii_detections_request": 3,
+  "pii_detections_response": 0,
+  "pii_types_found": "CA_SIN,EMAIL_ADDRESS,PERSON",
+  "department": "Planning",
+  "staff_key_id": 12,
+  "model": "gpt-4o",
+  "input_tokens": 847,
+  "output_tokens": 312,
+  "estimated_cost_cents": 4
+}
+```
+
+Each entry records:
+
+| Field | What it tells you |
+|---|---|
+| `pii_detections_request` | Number of PII items found and scrubbed from the outgoing request |
+| `pii_detections_response` | Number of PII items found and scrubbed from the AI provider's response |
+| `pii_types_found` | Comma-separated list of detected PII categories (e.g. `CA_SIN`, `PERSON`, `EMAIL_ADDRESS`) |
+| `department` | Which department sent the request |
+| `model` | Which AI model was used |
+| `input_tokens` / `output_tokens` | Token counts for cost tracking |
+| `estimated_cost_cents` | Estimated cost based on provider pricing |
+
+The hash chain (`previous_hash`, `chain_hash`) links each entry to the one before it. If any record is altered or deleted after the fact, the chain breaks and the tampering is detectable. This gives your CAO and auditors a provably intact record.
+
+---
+
+## PII scrubbing in action
+
+The gateway detects and removes Canadian personal information before any request reaches an AI provider. Here is what happens when a staff member sends a prompt containing PII.
+
+**What the staff member sends:**
+
+```
+Look up the file for Jane Smith, 742 Evergreen Terrace, Vancouver BC
+V5K 0A1. Her SIN is 046-454-286 and her email is jane.smith@example.com.
+Phone: 604-555-0123.
+```
+
+**What the AI provider actually receives:**
+
+```
+Look up the file for [NAME REMOVED], [ADDRESS REMOVED], [ADDRESS REMOVED]
+[POSTAL CODE REMOVED]. Her SIN is [SIN REMOVED] and her email is [EMAIL REMOVED].
+Phone: [PHONE REMOVED].
+```
+
+The gateway validates SINs using the Luhn checksum algorithm — the same method used by the CRA. A random nine-digit number like `123-456-789` is correctly ignored because it fails the checksum. The test SIN above (`046-454-286`) passes and is caught.
+
+**Detected PII types:**
+
+| Type | Example | Replacement |
+|---|---|---|
+| `CA_SIN` | 046-454-286 | `[SIN REMOVED]` |
+| `CA_BC_PHN` | 9876 543 210 | `[BC PHN REMOVED]` |
+| `CA_POSTAL_CODE` | V5K 0A1 | `[POSTAL CODE REMOVED]` |
+| `CA_PHONE_NUMBER` | 604-555-0123 | `[PHONE REMOVED]` |
+| `EMAIL_ADDRESS` | jane@example.com | `[EMAIL REMOVED]` |
+| `PERSON` | Jane Smith | `[NAME REMOVED]` |
+| `LOCATION` | 742 Evergreen Terrace | `[ADDRESS REMOVED]` |
+
+Provincial health numbers are supported for BC (PHN), Alberta (PHN), Ontario (OHIP), and Quebec (RAMQ).
+
+### Custom scrubbing rules
+
+Municipalities can add their own PII patterns without touching Python code. Edit `gateway/scrubbing_rules.yaml` and restart the gateway.
+
+For example, to scrub employee IDs in the format `EMP-12345`:
+
+```yaml
+custom_rules:
+  - name: EMPLOYEE_ID
+    pattern: '\bEMP-\d{5}\b'
+    replacement: '[REDACTED-EMPLOYEE-ID]'
+    enabled: true
+```
+
+Each rule needs a unique `name` (used in audit logs and `pii_types_found`), a valid Python regex `pattern`, a `replacement` string, and an `enabled` flag. Set `enabled: false` to disable a rule without deleting it. The gateway validates regex syntax at startup and skips invalid patterns with a warning.
+
+After editing, restart the gateway:
+
+```bash
+docker compose restart gateway
+```
+
+---
+
+## Releases
+
+### Tagging a release
+
+Releases follow [Semantic Versioning](https://semver.org). To create a new release:
+
+```bash
+# Tag the release
+git tag -a v1.1.0 -m "v1.1.0 — Redis rate limiting, per-admin MFA, LDAP integration"
+
+# Push the tag
+git push origin v1.1.0
+```
+
+Then create a GitHub release from the tag:
+
+```bash
+gh release create v1.1.0 --title "v1.1.0" --notes-file CHANGELOG.md
+```
+
+Or create the release manually at **github.com → Releases → Draft a new release**, selecting the tag and pasting the relevant section from [CHANGELOG.md](CHANGELOG.md).
+
+### Version history
+
+| Version | Date | Highlights |
+|---|---|---|
+| [1.1.0](CHANGELOG.md) | 2026-04-03 | Redis rate limiting, per-admin MFA, LDAP/AD integration, Caddy TLS, PostgreSQL backups |
+| [1.0.0](CHANGELOG.md) | 2026-04-02 | Initial release — PII scrubbing, audit trail, API proxying, Docker deployment |
+
+---
+
+## Security
+
+For security vulnerability reporting, see [SECURITY.md](SECURITY.md).
+
+The gateway enforces the following protections:
+
+- **JWT secret validation** — refuses to start if `GATEWAY_SECRET` is missing or under 32 characters
+- **Login brute force protection** — admin login is rate limited to 10 attempts per 15 minutes per IP; all failures are logged to PostgreSQL
+- **HTTP security headers** — `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, HSTS, CSP, Referrer-Policy, and Permissions-Policy on all responses
+- **No hardcoded secrets** — the gateway and Docker Compose refuse to start with default or missing credentials
+- **Database connection pooling** — bounded connections prevent resource exhaustion under load
+- **Hash-chained audit trail** — tamper-evident logging that breaks visibly if records are altered
 
 ---
 

@@ -4,6 +4,10 @@ Each test verifies that a specific PII type is detected and replaced with
 the correct placeholder, and that surrounding text is preserved.
 """
 
+import textwrap
+
+from scrubber import Scrubber
+
 
 class TestSinDetection:
     def test_valid_sin_detected(self, scrubber):
@@ -133,3 +137,63 @@ class TestEdgeCases:
         # Surrounding text should be intact.
         assert "Call" in result.text
         assert "for details" in result.text
+
+
+class TestCustomRules:
+    def test_custom_rule_applied(self, tmp_path):
+        """Custom YAML rule scrubs matching text."""
+        rules = tmp_path / "rules.yaml"
+        rules.write_text(textwrap.dedent("""\
+            custom_rules:
+              - name: EMPLOYEE_ID
+                pattern: '\\bEMP-\\d{5}\\b'
+                replacement: '[REDACTED-EMPLOYEE-ID]'
+                enabled: true
+        """))
+        s = Scrubber(custom_rules_path=str(rules))
+        result = s.scrub("Contact EMP-12345 for details")
+        assert "EMP-12345" not in result.text
+        assert "[REDACTED-EMPLOYEE-ID]" in result.text
+        assert result.pii_found
+
+    def test_disabled_custom_rule_skipped(self, tmp_path):
+        """Rule with enabled: false is not applied."""
+        rules = tmp_path / "rules.yaml"
+        rules.write_text(textwrap.dedent("""\
+            custom_rules:
+              - name: EMPLOYEE_ID
+                pattern: '\\bEMP-\\d{5}\\b'
+                replacement: '[REDACTED-EMPLOYEE-ID]'
+                enabled: false
+        """))
+        s = Scrubber(custom_rules_path=str(rules))
+        result = s.scrub("Contact EMP-12345 for details")
+        assert "EMP-12345" in result.text
+        emp_detections = [d for d in result.detections if d.entity_type == "EMPLOYEE_ID"]
+        assert len(emp_detections) == 0
+
+    def test_invalid_regex_skipped(self, tmp_path):
+        """Bad regex logs warning, doesn't crash, other rules still work."""
+        rules = tmp_path / "rules.yaml"
+        rules.write_text(textwrap.dedent("""\
+            custom_rules:
+              - name: BAD_RULE
+                pattern: '[invalid(('
+                replacement: '[REDACTED]'
+                enabled: true
+              - name: GOOD_RULE
+                pattern: '\\bTICKET-\\d{4}\\b'
+                replacement: '[REDACTED-TICKET]'
+                enabled: true
+        """))
+        s = Scrubber(custom_rules_path=str(rules))
+        result = s.scrub("See TICKET-9999 for info")
+        assert "TICKET-9999" not in result.text
+        assert "[REDACTED-TICKET]" in result.text
+
+    def test_missing_yaml_no_crash(self, tmp_path):
+        """No YAML file present — scrubber loads fine with only built-ins."""
+        s = Scrubber(custom_rules_path=str(tmp_path / "nonexistent.yaml"))
+        result = s.scrub("My SIN is 046 454 286")
+        assert "046 454 286" not in result.text
+        assert "[SIN REMOVED]" in result.text

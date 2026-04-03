@@ -1,0 +1,24 @@
+# Custom PII Scrubbing Rules
+#
+# Add your own regex patterns here. Each rule is applied alongside the
+# built-in Canadian PII recognizers (SIN, health numbers, etc.).
+#
+# Format:
+#   - name: UNIQUE_NAME        # Used in audit logs and pii_types_found
+#     pattern: '\bEMP-\d{5}\b' # Python regex (must be valid re syntax)
+#     replacement: '[REDACTED]' # What replaces matched text
+#     enabled: true             # Set to false to disable without deleting
+#
+# The gateway loads this file at startup. Restart after editing:
+#   docker compose restart gateway
+
+custom_rules:
+  - name: FOLIO_NUMBER
+    pattern: '\b\d{3}-\d{3}-\d{3}\b'
+    replacement: '[REDACTED-FOLIO]'
+    enabled: true
+
+  - name: EMPLOYEE_ID
+    pattern: '\bEMP-\d{5}\b'
+    replacement: '[REDACTED-EMPLOYEE-ID]'
+    enabled: true
