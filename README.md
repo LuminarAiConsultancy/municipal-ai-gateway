@@ -107,11 +107,11 @@ See [docs/BLUEPRINT.md](docs/BLUEPRINT.md) for the full product specification, c
 
 The gateway handles the **technical layer** -- what staff are sending and what PII was detected.
 
-[LUMINARYX](https://luminaryx.ca) handles the **governance layer** -- documented decision approvals, regulatory framework mapping, board-ready compliance reports, and a defensible audit trail for your CAO and council.
+[LUMINARYX]([https://app.staging.luminaryx.ca)] handles the **governance layer** -- documented decision approvals, regulatory framework mapping, board-ready compliance reports, and a defensible audit trail for your CAO and council.
 
 Together they answer every question a privacy commissioner will ask.
 
-**Learn more: [luminaryx.ca](https://luminaryx.ca)**
+**Learn more: [luminaryx.ca]([[https://app.staging.luminaryx.ca]**
 
 ---
 
@@ -122,5 +122,5 @@ MIT -- free to use, deploy, and modify. See [LICENSE](LICENSE).
 ---
 
 <p align="center">
-Built to complement <a href="https://luminaryx.ca">LUMINARYX</a> -- municipal AI governance for Canadian local government.
+Built to complement <a href="https://app.staging.luminaryx.ca">LUMINARYX</a> -- municipal AI governance for Canadian local government.
 </p>
