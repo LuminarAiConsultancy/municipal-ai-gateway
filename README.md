@@ -228,7 +228,14 @@ This is an honest accounting of what the README describes versus what the code d
 
 Once the gateway is running with at least one AI provider configured, you can send a test request containing personal information and confirm the gateway catches it.
 
-First, create a test staff key:
+There are two types of authentication headers used in these commands:
+
+- **`Authorization: Bearer YOUR_GATEWAY_SECRET`** is the admin password from your `.env` file. It protects admin endpoints like `/admin/keys` and `/admin/requests`.
+- **`X-Gateway-Key: ...`** is a staff API key created via `/admin/keys`. It authenticates proxy requests through `/v1/{provider}/...`. The value is the raw 64-character key string returned when you create the key. No `Bearer` prefix.
+
+**Step 1.** Create a test staff key.
+
+Bash (Linux/Mac/Git Bash):
 
 ```bash
 curl -sk https://localhost/admin/keys \
@@ -237,7 +244,21 @@ curl -sk https://localhost/admin/keys \
   -d '{"department": "Testing", "description": "PII verification test"}'
 ```
 
-Copy the `key` value from the response. Then send a request containing obvious PII:
+PowerShell (Windows):
+
+```powershell
+Invoke-RestMethod https://localhost/admin/keys -Method Post `
+  -Headers @{ Authorization = "Bearer YOUR_GATEWAY_SECRET" } `
+  -ContentType "application/json" `
+  -Body '{"department": "Testing", "description": "PII verification test"}' `
+  -SkipCertificateCheck
+```
+
+Copy the `key` value from the response.
+
+**Step 2.** Send a request containing obvious PII.
+
+Bash:
 
 ```bash
 curl -sk https://localhost/v1/openai/v1/chat/completions \
@@ -252,11 +273,31 @@ curl -sk https://localhost/v1/openai/v1/chat/completions \
   }'
 ```
 
-Now check the audit log to see what the gateway caught:
+PowerShell:
+
+```powershell
+Invoke-RestMethod https://localhost/v1/openai/v1/chat/completions -Method Post `
+  -Headers @{ "X-Gateway-Key" = "PASTE_YOUR_KEY_HERE" } `
+  -ContentType "application/json" `
+  -Body '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"Look up the file for Jane Smith, 742 Evergreen Terrace, Vancouver BC V5K 0A1. Her SIN is 046-454-286 and email is jane.smith@example.com"}]}' `
+  -SkipCertificateCheck
+```
+
+**Step 3.** Check the audit log to see what the gateway caught.
+
+Bash:
 
 ```bash
 curl -sk https://localhost/admin/requests \
   -H "Authorization: Bearer YOUR_GATEWAY_SECRET"
+```
+
+PowerShell:
+
+```powershell
+Invoke-RestMethod https://localhost/admin/requests `
+  -Headers @{ Authorization = "Bearer YOUR_GATEWAY_SECRET" } `
+  -SkipCertificateCheck
 ```
 
 In the most recent entry, `pii_detections_request` shows how many PII items were found and `pii_types_found` lists the types detected (such as `CA_SIN,EMAIL_ADDRESS,LOCATION,PERSON`). The AI provider never saw the original personal information. It received `[NAME REMOVED]`, `[SIN REMOVED]`, `[EMAIL REMOVED]`, and `[ADDRESS REMOVED]` instead.

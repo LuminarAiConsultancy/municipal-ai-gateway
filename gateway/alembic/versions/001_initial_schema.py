@@ -16,53 +16,59 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        "api_keys",
-        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
-        sa.Column("key", sa.String(64), unique=True, nullable=False, index=True),
-        sa.Column("department", sa.String(128), nullable=False),
-        sa.Column("description", sa.String(256)),
-        sa.Column("active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
-        sa.Column("created_at", sa.DateTime(timezone=True)),
-        sa.Column("last_used_at", sa.DateTime(timezone=True)),
-    )
+    bind = op.get_bind()
+    existing_tables = sa.inspect(bind).get_table_names()
 
-    op.create_table(
-        "request_logs",
-        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
-        sa.Column("timestamp", sa.DateTime(timezone=True)),
-        sa.Column("provider", sa.String(32), nullable=False),
-        sa.Column("method", sa.String(8), nullable=False),
-        sa.Column("path", sa.Text(), nullable=False),
-        sa.Column("request_hash", sa.String(64)),
-        sa.Column("response_status", sa.Integer()),
-        sa.Column("response_hash", sa.String(64)),
-        sa.Column("source_ip", sa.String(45)),
-        sa.Column("duration_ms", sa.Integer()),
-        sa.Column("pii_detections_request", sa.Integer(), server_default=sa.text("0")),
-        sa.Column("pii_detections_response", sa.Integer(), server_default=sa.text("0")),
-        sa.Column("pii_types_found", sa.Text()),
-        sa.Column("previous_hash", sa.String(64)),
-        sa.Column("chain_hash", sa.String(64)),
-        sa.Column("staff_key_id", sa.Integer()),
-        sa.Column("department", sa.String(128)),
-        sa.Column("model", sa.String(64)),
-        sa.Column("input_tokens", sa.Integer(), server_default=sa.text("0")),
-        sa.Column("output_tokens", sa.Integer(), server_default=sa.text("0")),
-        sa.Column("estimated_cost_cents", sa.Integer(), server_default=sa.text("0")),
-    )
+    if "api_keys" not in existing_tables:
+        op.create_table(
+            "api_keys",
+            sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+            sa.Column("key", sa.String(64), unique=True, nullable=False, index=True),
+            sa.Column("department", sa.String(128), nullable=False),
+            sa.Column("description", sa.String(256)),
+            sa.Column("active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
+            sa.Column("created_at", sa.DateTime(timezone=True)),
+            sa.Column("last_used_at", sa.DateTime(timezone=True)),
+        )
 
-    op.create_table(
-        "department_policies",
-        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
-        sa.Column("department", sa.String(128), unique=True, nullable=False, index=True),
-        sa.Column("requests_per_minute_per_key", sa.Integer(), server_default=sa.text("60")),
-        sa.Column("requests_per_minute_department", sa.Integer(), server_default=sa.text("200")),
-        sa.Column("allowed_models", sa.Text()),
-        sa.Column("monthly_cost_limit_cents", sa.Integer()),
-        sa.Column("created_at", sa.DateTime(timezone=True)),
-        sa.Column("updated_at", sa.DateTime(timezone=True)),
-    )
+    if "request_logs" not in existing_tables:
+        op.create_table(
+            "request_logs",
+            sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+            sa.Column("timestamp", sa.DateTime(timezone=True)),
+            sa.Column("provider", sa.String(32), nullable=False),
+            sa.Column("method", sa.String(8), nullable=False),
+            sa.Column("path", sa.Text(), nullable=False),
+            sa.Column("request_hash", sa.String(64)),
+            sa.Column("response_status", sa.Integer()),
+            sa.Column("response_hash", sa.String(64)),
+            sa.Column("source_ip", sa.String(45)),
+            sa.Column("duration_ms", sa.Integer()),
+            sa.Column("pii_detections_request", sa.Integer(), server_default=sa.text("0")),
+            sa.Column("pii_detections_response", sa.Integer(), server_default=sa.text("0")),
+            sa.Column("pii_types_found", sa.Text()),
+            sa.Column("previous_hash", sa.String(64)),
+            sa.Column("chain_hash", sa.String(64)),
+            sa.Column("staff_key_id", sa.Integer()),
+            sa.Column("department", sa.String(128)),
+            sa.Column("model", sa.String(64)),
+            sa.Column("input_tokens", sa.Integer(), server_default=sa.text("0")),
+            sa.Column("output_tokens", sa.Integer(), server_default=sa.text("0")),
+            sa.Column("estimated_cost_cents", sa.Integer(), server_default=sa.text("0")),
+        )
+
+    if "department_policies" not in existing_tables:
+        op.create_table(
+            "department_policies",
+            sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+            sa.Column("department", sa.String(128), unique=True, nullable=False, index=True),
+            sa.Column("requests_per_minute_per_key", sa.Integer(), server_default=sa.text("60")),
+            sa.Column("requests_per_minute_department", sa.Integer(), server_default=sa.text("200")),
+            sa.Column("allowed_models", sa.Text()),
+            sa.Column("monthly_cost_limit_cents", sa.Integer()),
+            sa.Column("created_at", sa.DateTime(timezone=True)),
+            sa.Column("updated_at", sa.DateTime(timezone=True)),
+        )
 
 
 def downgrade() -> None:
