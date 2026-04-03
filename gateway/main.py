@@ -1095,6 +1095,92 @@ async def list_admins(request: Request):
         ]
 
 
+# ── Stats endpoint ───────────────────────────────────────────────────────────
+
+
+@app.get("/admin/stats")
+async def admin_stats(request: Request):
+    """Return summary statistics for the admin dashboard."""
+    await _require_admin_session(request)
+
+    now = dt.datetime.now(dt.timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    async with app.state.session_factory() as session:
+        # Total requests
+        total_result = await session.execute(select(func.count(RequestLog.id)))
+        total_requests = total_result.scalar() or 0
+
+        # Requests today
+        today_result = await session.execute(
+            select(func.count(RequestLog.id)).filter(RequestLog.timestamp >= today_start)
+        )
+        requests_today = today_result.scalar() or 0
+
+        # Requests this month
+        month_result = await session.execute(
+            select(func.count(RequestLog.id)).filter(RequestLog.timestamp >= month_start)
+        )
+        requests_this_month = month_result.scalar() or 0
+
+        # Total PII detections
+        pii_req_result = await session.execute(
+            select(func.coalesce(func.sum(RequestLog.pii_detections_request), 0))
+        )
+        pii_resp_result = await session.execute(
+            select(func.coalesce(func.sum(RequestLog.pii_detections_response), 0))
+        )
+        total_pii = (pii_req_result.scalar() or 0) + (pii_resp_result.scalar() or 0)
+
+        # Active API keys
+        keys_result = await session.execute(
+            select(func.count(ApiKey.id)).filter(ApiKey.active == True)
+        )
+        active_keys = keys_result.scalar() or 0
+
+        # Active departments (from keys)
+        dept_result = await session.execute(
+            select(func.count(func.distinct(ApiKey.department))).filter(ApiKey.active == True)
+        )
+        active_departments = dept_result.scalar() or 0
+
+        # Provider breakdown (this month)
+        provider_rows = await session.execute(
+            select(RequestLog.provider, func.count(RequestLog.id))
+            .filter(RequestLog.timestamp >= month_start)
+            .group_by(RequestLog.provider)
+        )
+        provider_breakdown = {row[0]: row[1] for row in provider_rows}
+
+        # Department breakdown (this month)
+        dept_rows = await session.execute(
+            select(RequestLog.department, func.count(RequestLog.id))
+            .filter(RequestLog.timestamp >= month_start)
+            .group_by(RequestLog.department)
+        )
+        department_breakdown = {(row[0] or "Unknown"): row[1] for row in dept_rows}
+
+        # Monthly cost (cents)
+        cost_result = await session.execute(
+            select(func.coalesce(func.sum(RequestLog.estimated_cost_cents), 0))
+            .filter(RequestLog.timestamp >= month_start)
+        )
+        monthly_cost_cents = cost_result.scalar() or 0
+
+    return {
+        "total_requests": total_requests,
+        "requests_today": requests_today,
+        "requests_this_month": requests_this_month,
+        "total_pii_detections": total_pii,
+        "active_keys": active_keys,
+        "active_departments": active_departments,
+        "provider_breakdown": provider_breakdown,
+        "department_breakdown": department_breakdown,
+        "monthly_cost_cents": monthly_cost_cents,
+    }
+
+
 # ── Staff key management endpoints ──────────────────────────────────────────
 
 
@@ -1371,12 +1457,26 @@ async def get_policy(department: str, request: Request):
 
 # ── Dashboard serving ────────────────────────────────────────────────────────
 
+# New admin SPA (JWT-based auth)
+_admin_dir = pathlib.Path(__file__).parent / "static" / "admin"
+
+
+@app.get("/admin")
+async def serve_admin_dashboard():
+    """Serve the admin dashboard SPA."""
+    index_file = _admin_dir / "index.html"
+    if not index_file.exists():
+        raise HTTPException(status_code=404, detail="Admin dashboard not found.")
+    return FileResponse(str(index_file), media_type="text/html")
+
+
+# Legacy dashboard (GATEWAY_SECRET auth) — kept for backward compatibility
 _dashboard_dir = pathlib.Path(__file__).parent / "dashboard"
 
 
 @app.get("/dashboard")
-async def serve_dashboard():
-    """Serve the admin dashboard HTML page."""
+async def serve_legacy_dashboard():
+    """Serve the legacy admin dashboard HTML page."""
     index_file = _dashboard_dir / "index.html"
     if not index_file.exists():
         raise HTTPException(status_code=404, detail="Dashboard not found.")

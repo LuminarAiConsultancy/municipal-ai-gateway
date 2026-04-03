@@ -1,0 +1,1332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Municipal AI Gateway — Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400;600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ── Design tokens ──────────────────────────────────────────────────────── */
+:root {
+  --navy: #1a2744;
+  --navy-light: #2c3e5f;
+  --navy-hover: #233357;
+  --gold: #c9a84c;
+  --gold-light: #e8d494;
+  --bg: #f4f5f7;
+  --card: #ffffff;
+  --text: #1a2744;
+  --text-muted: #6b7280;
+  --border: #e5e7eb;
+  --green: #059669;
+  --red: #dc2626;
+  --orange: #d97706;
+  --sidebar-w: 240px;
+  --header-h: 56px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+h1, h2, h3, h4 {
+  font-family: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+  font-weight: 600;
+}
+
+/* ── Utility ────────────────────────────────────────────────────────────── */
+.hidden { display: none !important; }
+.text-muted { color: var(--text-muted); }
+.text-gold { color: var(--gold); }
+.text-green { color: var(--green); }
+.text-red { color: var(--red); }
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0.55rem 1.1rem;
+  border: none; border-radius: 6px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.85rem; font-weight: 500;
+  cursor: pointer; transition: background 0.15s, opacity 0.15s;
+  text-decoration: none;
+}
+.btn:hover { opacity: 0.88; }
+.btn-navy { background: var(--navy); color: #fff; }
+.btn-gold { background: var(--gold); color: var(--navy); }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+.btn-outline:hover { border-color: var(--navy); }
+.btn-sm { padding: 0.35rem 0.7rem; font-size: 0.8rem; }
+.btn-red { background: var(--red); color: #fff; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Form elements ──────────────────────────────────────────────────────── */
+input[type="text"], input[type="email"], input[type="password"],
+input[type="number"], select {
+  width: 100%; padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border); border-radius: 6px;
+  font-family: 'DM Sans', sans-serif; font-size: 0.9rem;
+  background: #fff; color: var(--text);
+  transition: border-color 0.15s;
+}
+input:focus, select:focus { outline: none; border-color: var(--gold); }
+label { display: block; font-size: 0.82rem; font-weight: 500; margin-bottom: 0.3rem; color: var(--text-muted); }
+.form-group { margin-bottom: 1rem; }
+
+/* ── Auth screens (login, TOTP) ─────────────────────────────────────────── */
+.auth-screen {
+  position: fixed; inset: 0;
+  background: var(--navy);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000;
+}
+.auth-box {
+  background: var(--card);
+  border-radius: 10px;
+  padding: 2.5rem;
+  width: 400px; max-width: 92vw;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+.auth-box h2 {
+  color: var(--navy); margin-bottom: 0.4rem; font-size: 1.25rem;
+}
+.auth-box .subtitle {
+  color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1.5rem;
+}
+.auth-box .btn { width: 100%; justify-content: center; padding: 0.7rem; font-size: 0.9rem; }
+.auth-box .error-msg {
+  color: var(--red); font-size: 0.82rem; margin-bottom: 0.8rem; min-height: 1.2em;
+}
+.auth-logo {
+  font-family: 'Source Serif 4', serif;
+  font-size: 1rem; color: var(--gold); margin-bottom: 1.5rem;
+  letter-spacing: 0.04em;
+}
+.auth-footer {
+  margin-top: 1.5rem; font-size: 0.75rem; color: var(--text-muted);
+}
+.auth-footer a { color: var(--gold); text-decoration: none; }
+
+/* TOTP code input */
+.totp-inputs {
+  display: flex; gap: 0.5rem; justify-content: center; margin-bottom: 1.2rem;
+}
+.totp-inputs input {
+  width: 44px; height: 52px;
+  text-align: center; font-size: 1.3rem; font-weight: 600;
+  border: 2px solid var(--border); border-radius: 8px;
+  font-family: 'DM Sans', sans-serif;
+}
+.totp-inputs input:focus { border-color: var(--gold); }
+
+/* QR code */
+.qr-placeholder {
+  margin: 1rem auto;
+  padding: 1rem;
+  background: #f9f9f9; border-radius: 8px;
+  max-width: 240px;
+}
+.qr-placeholder img { max-width: 100%; }
+.totp-secret-display {
+  font-family: monospace; font-size: 0.9rem;
+  background: var(--bg); padding: 0.6rem 1rem;
+  border-radius: 6px; margin: 0.8rem 0;
+  word-break: break-all;
+  user-select: all;
+}
+
+/* ── App shell ──────────────────────────────────────────────────────────── */
+#app-shell { display: none; min-height: 100vh; }
+#app-shell.active { display: flex; }
+
+/* Header bar */
+.app-header {
+  position: fixed; top: 0; left: 0; right: 0;
+  height: var(--header-h);
+  background: var(--navy);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 1.5rem;
+  z-index: 100;
+  border-bottom: 3px solid var(--gold);
+}
+.app-header-title {
+  font-family: 'Source Serif 4', serif;
+  font-size: 1.1rem; color: #fff; font-weight: 600;
+}
+.app-header-title span { color: var(--gold); }
+.app-header-right {
+  display: flex; align-items: center; gap: 1rem;
+}
+.app-header-right .admin-email {
+  font-size: 0.8rem; color: var(--gold-light);
+}
+.app-header-right .btn-logout {
+  background: transparent; border: 1px solid rgba(255,255,255,0.2);
+  color: #fff; font-size: 0.78rem; padding: 0.3rem 0.8rem; border-radius: 4px;
+  cursor: pointer; font-family: 'DM Sans', sans-serif;
+}
+.app-header-right .btn-logout:hover { border-color: var(--gold); color: var(--gold); }
+
+/* Sidebar */
+.sidebar {
+  position: fixed; top: var(--header-h); left: 0; bottom: 0;
+  width: var(--sidebar-w);
+  background: #fff;
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  z-index: 50;
+}
+.sidebar-nav { flex: 1; padding: 1rem 0; }
+.sidebar-nav a {
+  display: flex; align-items: center; gap: 0.7rem;
+  padding: 0.65rem 1.5rem;
+  font-size: 0.88rem; color: var(--text-muted);
+  text-decoration: none; transition: all 0.15s;
+  border-left: 3px solid transparent;
+}
+.sidebar-nav a:hover { color: var(--navy); background: var(--bg); }
+.sidebar-nav a.active {
+  color: var(--navy); font-weight: 600;
+  background: var(--bg);
+  border-left-color: var(--gold);
+}
+.sidebar-nav a .nav-icon { font-size: 1.1rem; width: 1.4rem; text-align: center; }
+.sidebar-footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.72rem; color: var(--text-muted);
+  line-height: 1.6;
+}
+.sidebar-footer a { color: var(--gold); text-decoration: none; font-weight: 500; }
+
+/* Main content */
+.main-content {
+  margin-left: var(--sidebar-w);
+  margin-top: var(--header-h);
+  padding: 1.5rem 2rem 2rem;
+  min-height: calc(100vh - var(--header-h));
+}
+
+/* Page header */
+.page-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+.page-header h2 { font-size: 1.35rem; }
+
+/* ── Cards ──────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--card);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  padding: 1.25rem;
+}
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.stat-card {
+  background: var(--card);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  padding: 1.25rem;
+}
+.stat-card .stat-label {
+  font-size: 0.78rem; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.05em;
+  margin-bottom: 0.3rem;
+}
+.stat-card .stat-value {
+  font-family: 'Source Serif 4', serif;
+  font-size: 1.8rem; font-weight: 700; color: var(--navy);
+}
+.stat-card .stat-sub {
+  font-size: 0.78rem; color: var(--text-muted); margin-top: 0.2rem;
+}
+.stat-card.pii .stat-value { color: var(--orange); }
+.stat-card.cost .stat-value { color: var(--green); }
+
+/* Breakdown lists */
+.breakdown-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.breakdown-card {
+  background: var(--card);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  padding: 1.25rem;
+}
+.breakdown-card h4 {
+  font-size: 0.88rem; margin-bottom: 0.8rem; color: var(--text-muted);
+  font-family: 'DM Sans', sans-serif; font-weight: 600;
+}
+.breakdown-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0.4rem 0; font-size: 0.85rem;
+  border-bottom: 1px solid var(--bg);
+}
+.breakdown-row:last-child { border-bottom: none; }
+.breakdown-row .count { font-weight: 600; color: var(--navy); }
+
+/* ── Tables ─────────────────────────────────────────────────────────────── */
+.table-card {
+  background: var(--card);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.table-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.8rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  gap: 0.8rem; flex-wrap: wrap;
+}
+.table-toolbar .filters { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.table-toolbar select, .table-toolbar input {
+  width: auto; padding: 0.4rem 0.6rem; font-size: 0.82rem;
+}
+table {
+  width: 100%; border-collapse: collapse;
+}
+th {
+  text-align: left;
+  padding: 0.65rem 1.25rem;
+  font-size: 0.75rem; font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.04em;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+td {
+  padding: 0.65rem 1.25rem;
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--bg);
+  vertical-align: middle;
+}
+tr:hover td { background: #f9fafb; }
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  font-size: 0.72rem; font-weight: 600;
+}
+.badge-green { background: #ecfdf5; color: var(--green); }
+.badge-red { background: #fef2f2; color: var(--red); }
+.badge-orange { background: #fffbeb; color: var(--orange); }
+.badge-navy { background: #eef2ff; color: var(--navy); }
+
+/* Pagination */
+.table-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.82rem; color: var(--text-muted);
+}
+.pagination { display: flex; gap: 0.3rem; }
+.pagination button {
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--border); border-radius: 4px;
+  background: #fff; font-size: 0.8rem; cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+}
+.pagination button:hover { border-color: var(--navy); }
+.pagination button.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+.pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Modal ──────────────────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 200;
+}
+.modal {
+  background: #fff;
+  border-radius: 10px;
+  padding: 2rem;
+  width: 440px; max-width: 92vw;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.2);
+}
+.modal h3 { margin-bottom: 1.2rem; font-size: 1.1rem; }
+.modal-actions {
+  display: flex; gap: 0.6rem; justify-content: flex-end; margin-top: 1.5rem;
+}
+
+/* ── Responsive (tablet) ────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  :root { --sidebar-w: 0px; }
+  .sidebar { display: none; }
+  .main-content { margin-left: 0; padding: 1rem; }
+  .app-header { padding: 0 1rem; }
+  .breakdown-grid { grid-template-columns: 1fr; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ── Spinner ────────────────────────────────────────────────────────────── */
+.spinner {
+  display: inline-block; width: 18px; height: 18px;
+  border: 2px solid var(--border); border-top-color: var(--gold);
+  border-radius: 50%; animation: spin 0.6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-row td { text-align: center; padding: 2rem; color: var(--text-muted); }
+
+/* ── Toast ──────────────────────────────────────────────────────────────── */
+.toast {
+  position: fixed; bottom: 1.5rem; right: 1.5rem;
+  background: var(--navy); color: #fff;
+  padding: 0.7rem 1.2rem;
+  border-radius: 8px; font-size: 0.85rem;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  z-index: 300;
+  animation: slideUp 0.3s ease;
+}
+.toast.error { background: var(--red); }
+.toast.success { background: var(--green); }
+@keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- LOGIN SCREEN                                                           -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div id="screen-login" class="auth-screen">
+  <div class="auth-box">
+    <div class="auth-logo">Municipal AI Gateway</div>
+    <h2>Admin Sign In</h2>
+    <p class="subtitle">Enter your administrator credentials</p>
+    <div id="login-error" class="error-msg"></div>
+    <form id="login-form" autocomplete="on">
+      <div class="form-group">
+        <input type="email" id="login-email" placeholder="Email address" required autocomplete="username">
+      </div>
+      <div class="form-group">
+        <input type="password" id="login-password" placeholder="Password" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn btn-gold" id="login-btn">Sign In</button>
+    </form>
+    <div class="auth-footer">Powered by <a href="https://luminaryx.ca" target="_blank">LUMINARYX</a></div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- TOTP VERIFICATION SCREEN                                               -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div id="screen-totp" class="auth-screen hidden">
+  <div class="auth-box">
+    <div class="auth-logo">Municipal AI Gateway</div>
+    <h2>Two-Factor Authentication</h2>
+    <p class="subtitle">Enter the 6-digit code from your authenticator app</p>
+    <div id="totp-error" class="error-msg"></div>
+    <div class="totp-inputs" id="totp-inputs">
+      <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="one-time-code">
+      <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]">
+      <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]">
+      <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]">
+      <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]">
+      <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]">
+    </div>
+    <button class="btn btn-outline btn-sm" id="totp-setup-link" style="margin-bottom:0.5rem">
+      Set up authenticator app
+    </button>
+    <div class="auth-footer">Powered by <a href="https://luminaryx.ca" target="_blank">LUMINARYX</a></div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- TOTP ENROLLMENT SCREEN                                                 -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div id="screen-totp-setup" class="auth-screen hidden">
+  <div class="auth-box">
+    <div class="auth-logo">Municipal AI Gateway</div>
+    <h2>Set Up Two-Factor Authentication</h2>
+    <p class="subtitle">Scan this QR code with Google Authenticator, Authy, or any TOTP app</p>
+    <div id="totp-setup-error" class="error-msg"></div>
+    <div class="qr-placeholder" id="qr-container">
+      <div style="padding:2rem;color:var(--text-muted)"><span class="spinner"></span> Loading...</div>
+    </div>
+    <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:0.3rem">Or enter this key manually:</p>
+    <div class="totp-secret-display" id="totp-secret-display">—</div>
+    <button class="btn btn-gold" id="totp-setup-done" style="margin-top:0.5rem">
+      I've added it — continue
+    </button>
+    <div class="auth-footer">Powered by <a href="https://luminaryx.ca" target="_blank">LUMINARYX</a></div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- APP SHELL (dashboard)                                                  -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<div id="app-shell">
+  <!-- Header -->
+  <header class="app-header">
+    <div class="app-header-title">Municipal AI <span>Gateway</span></div>
+    <div class="app-header-right">
+      <span class="admin-email" id="header-email"></span>
+      <button class="btn-logout" id="btn-logout">Sign Out</button>
+    </div>
+  </header>
+
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-nav">
+      <a href="#overview" class="active" data-page="overview">
+        <span class="nav-icon">&#9632;</span> Overview
+      </a>
+      <a href="#requests" data-page="requests">
+        <span class="nav-icon">&#9776;</span> Request Log
+      </a>
+      <a href="#keys" data-page="keys">
+        <span class="nav-icon">&#9906;</span> API Keys
+      </a>
+      <a href="#admins" data-page="admins">
+        <span class="nav-icon">&#9734;</span> Administrators
+      </a>
+    </div>
+    <div class="sidebar-footer">
+      Powered by <a href="https://luminaryx.ca" target="_blank">LUMINARYX</a><br>
+      Municipal AI Governance
+    </div>
+  </nav>
+
+  <!-- Main content area -->
+  <main class="main-content">
+
+    <!-- ── Overview page ────────────────────────────────────────────── -->
+    <section id="page-overview" class="page">
+      <div class="page-header">
+        <h2>Overview</h2>
+        <button class="btn btn-outline btn-sm" id="btn-refresh-stats">Refresh</button>
+      </div>
+
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Requests Today</div>
+          <div class="stat-value" id="stat-today">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">This Month</div>
+          <div class="stat-value" id="stat-month">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Requests</div>
+          <div class="stat-value" id="stat-total">—</div>
+        </div>
+        <div class="stat-card pii">
+          <div class="stat-label">PII Detections</div>
+          <div class="stat-value" id="stat-pii">—</div>
+          <div class="stat-sub">items scrubbed</div>
+        </div>
+        <div class="stat-card cost">
+          <div class="stat-label">Monthly Spend</div>
+          <div class="stat-value" id="stat-cost">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Active Keys</div>
+          <div class="stat-value" id="stat-keys">—</div>
+          <div class="stat-sub" id="stat-depts">— departments</div>
+        </div>
+      </div>
+
+      <div class="breakdown-grid">
+        <div class="breakdown-card">
+          <h4>Requests by Provider</h4>
+          <div id="breakdown-provider"><span class="text-muted" style="font-size:0.85rem">Loading...</span></div>
+        </div>
+        <div class="breakdown-card">
+          <h4>Requests by Department</h4>
+          <div id="breakdown-department"><span class="text-muted" style="font-size:0.85rem">Loading...</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Request log page ─────────────────────────────────────────── -->
+    <section id="page-requests" class="page hidden">
+      <div class="page-header">
+        <h2>Request Log</h2>
+        <div style="display:flex;gap:0.5rem">
+          <button class="btn btn-outline btn-sm" id="btn-export-csv">Export CSV</button>
+          <button class="btn btn-outline btn-sm" id="btn-export-json">Export JSON</button>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-toolbar">
+          <div class="filters">
+            <select id="filter-department"><option value="">All departments</option></select>
+            <select id="filter-provider">
+              <option value="">All providers</option>
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic</option>
+              <option value="google">Google</option>
+            </select>
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Department</th>
+                <th>Provider</th>
+                <th>Model</th>
+                <th>Status</th>
+                <th>PII Found</th>
+                <th>Duration</th>
+                <th>Cost</th>
+              </tr>
+            </thead>
+            <tbody id="requests-tbody">
+              <tr class="loading-row"><td colspan="8"><span class="spinner"></span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-footer">
+          <span id="requests-info">—</span>
+          <div class="pagination" id="requests-pagination"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── API keys page ────────────────────────────────────────────── -->
+    <section id="page-keys" class="page hidden">
+      <div class="page-header">
+        <h2>API Keys</h2>
+        <button class="btn btn-gold btn-sm" id="btn-new-key">+ New Key</button>
+      </div>
+
+      <div class="table-card">
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Key Prefix</th>
+                <th>Department</th>
+                <th>Description</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Last Used</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="keys-tbody">
+              <tr class="loading-row"><td colspan="8"><span class="spinner"></span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Administrators page ──────────────────────────────────────── -->
+    <section id="page-admins" class="page hidden">
+      <div class="page-header">
+        <h2>Administrators</h2>
+        <button class="btn btn-gold btn-sm" id="btn-new-admin">+ New Admin</button>
+      </div>
+
+      <div class="table-card">
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Email</th>
+                <th>Status</th>
+                <th>TOTP</th>
+                <th>Created</th>
+                <th>Last Login</th>
+              </tr>
+            </thead>
+            <tbody id="admins-tbody">
+              <tr class="loading-row"><td colspan="6"><span class="spinner"></span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- MODALS                                                                 -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+
+<!-- New Key modal -->
+<div id="modal-new-key" class="modal-overlay hidden">
+  <div class="modal">
+    <h3>Create API Key</h3>
+    <div class="form-group">
+      <label>Department</label>
+      <input type="text" id="new-key-dept" placeholder="e.g. Planning">
+    </div>
+    <div class="form-group">
+      <label>Description</label>
+      <input type="text" id="new-key-desc" placeholder="e.g. Jane Smith - Planning Dept">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('modal-new-key')">Cancel</button>
+      <button class="btn btn-gold" id="btn-create-key">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Key created modal -->
+<div id="modal-key-created" class="modal-overlay hidden">
+  <div class="modal">
+    <h3>API Key Created</h3>
+    <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:0.8rem">
+      Copy this key now. It will not be shown again.
+    </p>
+    <div class="totp-secret-display" id="created-key-value" style="font-size:0.82rem">—</div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="btn-copy-key">Copy</button>
+      <button class="btn btn-navy" onclick="closeModal('modal-key-created')">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- New Admin modal -->
+<div id="modal-new-admin" class="modal-overlay hidden">
+  <div class="modal">
+    <h3>Create Administrator</h3>
+    <div class="form-group">
+      <label>Email</label>
+      <input type="email" id="new-admin-email" placeholder="admin@municipality.ca">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="new-admin-password" placeholder="Strong password">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('modal-new-admin')">Cancel</button>
+      <button class="btn btn-gold" id="btn-create-admin">Create</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<!-- APPLICATION LOGIC                                                      -->
+<!-- ════════════════════════════════════════════════════════════════════════ -->
+<script>
+(function() {
+  'use strict';
+
+  // ── State ──────────────────────────────────────────────────────────────
+  let jwt = null;          // Session token — memory only
+  let tempToken = null;    // Temp token for TOTP flow
+  let adminEmail = '';
+  let currentPage = 'overview';
+  let requestsPage = 1;
+  const PER_PAGE = 25;
+
+  // ── API helper ─────────────────────────────────────────────────────────
+  const API = {
+    async fetch(path, opts = {}) {
+      const headers = opts.headers || {};
+      headers['Content-Type'] = headers['Content-Type'] || 'application/json';
+      if (jwt) headers['Authorization'] = 'Bearer ' + jwt;
+
+      const res = await fetch(path, { ...opts, headers });
+
+      if (res.status === 401) {
+        jwt = null;
+        tempToken = null;
+        showScreen('login');
+        throw new Error('Session expired');
+      }
+
+      return res;
+    },
+
+    async get(path) {
+      return this.fetch(path);
+    },
+
+    async post(path, body) {
+      return this.fetch(path, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    },
+
+    async del(path) {
+      return this.fetch(path, { method: 'DELETE' });
+    },
+  };
+
+  // ── Screen management ──────────────────────────────────────────────────
+  function showScreen(name) {
+    document.getElementById('screen-login').classList.toggle('hidden', name !== 'login');
+    document.getElementById('screen-totp').classList.toggle('hidden', name !== 'totp');
+    document.getElementById('screen-totp-setup').classList.toggle('hidden', name !== 'totp-setup');
+    const shell = document.getElementById('app-shell');
+    if (name === 'dashboard') {
+      shell.classList.add('active');
+    } else {
+      shell.classList.remove('active');
+    }
+  }
+
+  // ── Toast ──────────────────────────────────────────────────────────────
+  function toast(msg, type = '') {
+    const el = document.createElement('div');
+    el.className = 'toast' + (type ? ' ' + type : '');
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 3500);
+  }
+
+  // ── Modal ──────────────────────────────────────────────────────────────
+  window.closeModal = function(id) {
+    document.getElementById(id).classList.add('hidden');
+  };
+  function openModal(id) {
+    document.getElementById(id).classList.remove('hidden');
+  }
+
+  // ── Formatting helpers ─────────────────────────────────────────────────
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-CA') + ' ' + d.toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function fmtCost(cents) {
+    if (!cents && cents !== 0) return '—';
+    return '$' + (cents / 100).toFixed(2);
+  }
+
+  function fmtNumber(n) {
+    if (n === null || n === undefined) return '—';
+    return n.toLocaleString();
+  }
+
+  // ── LOGIN FLOW ─────────────────────────────────────────────────────────
+  document.getElementById('login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    const errEl = document.getElementById('login-error');
+    const btn = document.getElementById('login-btn');
+    errEl.textContent = '';
+    btn.disabled = true;
+    btn.textContent = 'Signing in...';
+
+    try {
+      const res = await fetch('/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        errEl.textContent = data.detail || 'Login failed';
+        return;
+      }
+
+      adminEmail = email;
+
+      if (data.requires_totp) {
+        tempToken = data.temp_token;
+        showScreen('totp');
+        document.querySelector('#totp-inputs input').focus();
+      } else {
+        jwt = data.token;
+        enterDashboard();
+      }
+    } catch (err) {
+      errEl.textContent = 'Network error. Please try again.';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Sign In';
+    }
+  });
+
+  // ── TOTP VERIFICATION ─────────────────────────────────────────────────
+  const totpInputs = document.querySelectorAll('#totp-inputs input');
+
+  totpInputs.forEach((input, idx) => {
+    input.addEventListener('input', (e) => {
+      const val = e.target.value.replace(/\D/g, '');
+      e.target.value = val;
+      if (val && idx < totpInputs.length - 1) {
+        totpInputs[idx + 1].focus();
+      }
+      // Auto-submit when all 6 digits entered
+      const code = Array.from(totpInputs).map(i => i.value).join('');
+      if (code.length === 6) {
+        verifyTotp(code);
+      }
+    });
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Backspace' && !e.target.value && idx > 0) {
+        totpInputs[idx - 1].focus();
+      }
+    });
+
+    // Handle paste
+    input.addEventListener('paste', (e) => {
+      e.preventDefault();
+      const paste = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '');
+      paste.split('').slice(0, 6).forEach((ch, i) => {
+        if (totpInputs[i]) totpInputs[i].value = ch;
+      });
+      if (paste.length >= 6) verifyTotp(paste.slice(0, 6));
+    });
+  });
+
+  async function verifyTotp(code) {
+    const errEl = document.getElementById('totp-error');
+    errEl.textContent = '';
+
+    try {
+      const res = await fetch('/admin/totp/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ temp_token: tempToken, code }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        errEl.textContent = data.detail || 'Invalid code';
+        totpInputs.forEach(i => { i.value = ''; });
+        totpInputs[0].focus();
+        return;
+      }
+
+      jwt = data.token;
+      tempToken = null;
+      enterDashboard();
+    } catch (err) {
+      errEl.textContent = 'Network error';
+    }
+  }
+
+  // ── TOTP SETUP ─────────────────────────────────────────────────────────
+  document.getElementById('totp-setup-link').addEventListener('click', async () => {
+    showScreen('totp-setup');
+    document.getElementById('totp-setup-error').textContent = '';
+
+    try {
+      const res = await fetch('/admin/totp/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ temp_token: tempToken }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        document.getElementById('totp-setup-error').textContent = data.detail || 'Setup failed';
+        return;
+      }
+
+      // Generate QR code using a small inline approach
+      const qrContainer = document.getElementById('qr-container');
+      qrContainer.innerHTML = '<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' +
+        encodeURIComponent(data.uri) + '" alt="QR Code" style="width:200px;height:200px">';
+
+      document.getElementById('totp-secret-display').textContent = data.secret;
+    } catch (err) {
+      document.getElementById('totp-setup-error').textContent = 'Network error';
+    }
+  });
+
+  document.getElementById('totp-setup-done').addEventListener('click', () => {
+    showScreen('totp');
+    totpInputs.forEach(i => { i.value = ''; });
+    totpInputs[0].focus();
+  });
+
+  // ── ENTER DASHBOARD ────────────────────────────────────────────────────
+  function enterDashboard() {
+    document.getElementById('header-email').textContent = adminEmail;
+    showScreen('dashboard');
+    navigateTo('overview');
+  }
+
+  // ── LOGOUT ─────────────────────────────────────────────────────────────
+  document.getElementById('btn-logout').addEventListener('click', async () => {
+    try { await API.post('/admin/logout', {}); } catch (_) {}
+    jwt = null;
+    tempToken = null;
+    adminEmail = '';
+    showScreen('login');
+    document.getElementById('login-email').value = '';
+    document.getElementById('login-password').value = '';
+  });
+
+  // ── NAVIGATION ─────────────────────────────────────────────────────────
+  document.querySelectorAll('.sidebar-nav a').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      navigateTo(link.dataset.page);
+    });
+  });
+
+  function navigateTo(page) {
+    currentPage = page;
+    // Update sidebar active state
+    document.querySelectorAll('.sidebar-nav a').forEach(a => {
+      a.classList.toggle('active', a.dataset.page === page);
+    });
+    // Show/hide pages
+    document.querySelectorAll('.page').forEach(p => {
+      p.classList.toggle('hidden', p.id !== 'page-' + page);
+    });
+    // Load data
+    if (page === 'overview') loadStats();
+    if (page === 'requests') { requestsPage = 1; loadRequests(); }
+    if (page === 'keys') loadKeys();
+    if (page === 'admins') loadAdmins();
+  }
+
+  // ── OVERVIEW ───────────────────────────────────────────────────────────
+  document.getElementById('btn-refresh-stats').addEventListener('click', loadStats);
+
+  async function loadStats() {
+    try {
+      const res = await API.get('/admin/stats');
+      if (!res.ok) return;
+      const d = await res.json();
+
+      document.getElementById('stat-today').textContent = fmtNumber(d.requests_today);
+      document.getElementById('stat-month').textContent = fmtNumber(d.requests_this_month);
+      document.getElementById('stat-total').textContent = fmtNumber(d.total_requests);
+      document.getElementById('stat-pii').textContent = fmtNumber(d.total_pii_detections);
+      document.getElementById('stat-cost').textContent = fmtCost(d.monthly_cost_cents);
+      document.getElementById('stat-keys').textContent = fmtNumber(d.active_keys);
+      document.getElementById('stat-depts').textContent = d.active_departments + ' department' + (d.active_departments !== 1 ? 's' : '');
+
+      // Provider breakdown
+      const provEl = document.getElementById('breakdown-provider');
+      const provEntries = Object.entries(d.provider_breakdown || {});
+      if (provEntries.length === 0) {
+        provEl.innerHTML = '<span class="text-muted" style="font-size:0.85rem">No requests this month</span>';
+      } else {
+        provEl.innerHTML = provEntries
+          .sort((a, b) => b[1] - a[1])
+          .map(([name, count]) =>
+            '<div class="breakdown-row"><span>' + esc(name) + '</span><span class="count">' + fmtNumber(count) + '</span></div>'
+          ).join('');
+      }
+
+      // Department breakdown
+      const deptEl = document.getElementById('breakdown-department');
+      const deptEntries = Object.entries(d.department_breakdown || {});
+      if (deptEntries.length === 0) {
+        deptEl.innerHTML = '<span class="text-muted" style="font-size:0.85rem">No requests this month</span>';
+      } else {
+        deptEl.innerHTML = deptEntries
+          .sort((a, b) => b[1] - a[1])
+          .map(([name, count]) =>
+            '<div class="breakdown-row"><span>' + esc(name) + '</span><span class="count">' + fmtNumber(count) + '</span></div>'
+          ).join('');
+      }
+    } catch (err) {
+      console.error('Failed to load stats', err);
+    }
+  }
+
+  // ── REQUEST LOG ────────────────────────────────────────────────────────
+  const filterDept = document.getElementById('filter-department');
+  const filterProv = document.getElementById('filter-provider');
+
+  filterDept.addEventListener('change', () => { requestsPage = 1; loadRequests(); });
+  filterProv.addEventListener('change', () => { requestsPage = 1; loadRequests(); });
+
+  document.getElementById('btn-export-csv').addEventListener('click', () => exportRequests('csv'));
+  document.getElementById('btn-export-json').addEventListener('click', () => exportRequests('json'));
+
+  async function loadRequests() {
+    const tbody = document.getElementById('requests-tbody');
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="8"><span class="spinner"></span></td></tr>';
+
+    let url = '/admin/requests?page=' + requestsPage + '&per_page=' + PER_PAGE;
+    if (filterDept.value) url += '&department=' + encodeURIComponent(filterDept.value);
+    if (filterProv.value) url += '&provider=' + encodeURIComponent(filterProv.value);
+
+    try {
+      const res = await API.get(url);
+      if (!res.ok) return;
+      const d = await res.json();
+
+      // Populate department filter if needed
+      if (filterDept.options.length <= 1 && d.items.length > 0) {
+        const depts = [...new Set(d.items.map(r => r.department).filter(Boolean))].sort();
+        depts.forEach(dept => {
+          const opt = document.createElement('option');
+          opt.value = dept;
+          opt.textContent = dept;
+          filterDept.appendChild(opt);
+        });
+      }
+
+      if (d.items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted)">No requests found</td></tr>';
+      } else {
+        tbody.innerHTML = d.items.map(r => {
+          const piiTotal = (r.pii_detections_request || 0) + (r.pii_detections_response || 0);
+          const statusBadge = r.response_status < 400
+            ? '<span class="badge badge-green">' + r.response_status + '</span>'
+            : '<span class="badge badge-red">' + r.response_status + '</span>';
+          const piiBadge = piiTotal > 0
+            ? '<span class="badge badge-orange">' + piiTotal + ' items</span>'
+            : '<span class="text-muted">None</span>';
+
+          return '<tr>' +
+            '<td>' + fmtDate(r.timestamp) + '</td>' +
+            '<td>' + esc(r.department || '—') + '</td>' +
+            '<td>' + esc(r.provider) + '</td>' +
+            '<td>' + esc(r.model || '—') + '</td>' +
+            '<td>' + statusBadge + '</td>' +
+            '<td>' + piiBadge + '</td>' +
+            '<td>' + (r.duration_ms != null ? r.duration_ms + 'ms' : '—') + '</td>' +
+            '<td>' + fmtCost(r.estimated_cost_cents) + '</td>' +
+            '</tr>';
+        }).join('');
+      }
+
+      // Pagination info
+      document.getElementById('requests-info').textContent =
+        'Showing ' + ((d.page - 1) * d.per_page + 1) + '–' + Math.min(d.page * d.per_page, d.total) + ' of ' + d.total;
+
+      renderPagination(d.page, d.pages);
+    } catch (err) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--red)">Failed to load requests</td></tr>';
+    }
+  }
+
+  function renderPagination(page, totalPages) {
+    const container = document.getElementById('requests-pagination');
+    container.innerHTML = '';
+
+    if (totalPages <= 1) return;
+
+    const prevBtn = document.createElement('button');
+    prevBtn.textContent = 'Prev';
+    prevBtn.disabled = page <= 1;
+    prevBtn.addEventListener('click', () => { requestsPage = page - 1; loadRequests(); });
+    container.appendChild(prevBtn);
+
+    // Show up to 5 page buttons
+    let start = Math.max(1, page - 2);
+    let end = Math.min(totalPages, start + 4);
+    start = Math.max(1, end - 4);
+
+    for (let i = start; i <= end; i++) {
+      const btn = document.createElement('button');
+      btn.textContent = i;
+      btn.className = i === page ? 'active' : '';
+      btn.addEventListener('click', () => { requestsPage = i; loadRequests(); });
+      container.appendChild(btn);
+    }
+
+    const nextBtn = document.createElement('button');
+    nextBtn.textContent = 'Next';
+    nextBtn.disabled = page >= totalPages;
+    nextBtn.addEventListener('click', () => { requestsPage = page + 1; loadRequests(); });
+    container.appendChild(nextBtn);
+  }
+
+  function exportRequests(format) {
+    if (!jwt) return;
+    let url = '/admin/requests/export?format=' + format;
+    if (filterDept.value) url += '&department=' + encodeURIComponent(filterDept.value);
+
+    // Use a hidden link with auth header workaround — for simplicity, open in new window
+    // Since the endpoint requires auth, we fetch it and create a blob
+    API.get(url).then(res => res.blob()).then(blob => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'audit_log.' + format;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }).catch(() => toast('Export failed', 'error'));
+  }
+
+  // ── API KEYS ───────────────────────────────────────────────────────────
+  document.getElementById('btn-new-key').addEventListener('click', () => {
+    document.getElementById('new-key-dept').value = '';
+    document.getElementById('new-key-desc').value = '';
+    openModal('modal-new-key');
+  });
+
+  document.getElementById('btn-create-key').addEventListener('click', async () => {
+    const dept = document.getElementById('new-key-dept').value.trim();
+    const desc = document.getElementById('new-key-desc').value.trim();
+    if (!dept) { toast('Department is required', 'error'); return; }
+
+    try {
+      const res = await API.post('/admin/keys', { department: dept, description: desc || dept });
+      if (!res.ok) {
+        const err = await res.json();
+        toast(err.detail || 'Failed to create key', 'error');
+        return;
+      }
+      const data = await res.json();
+      closeModal('modal-new-key');
+      document.getElementById('created-key-value').textContent = data.key;
+      openModal('modal-key-created');
+      loadKeys();
+    } catch (err) {
+      toast('Network error', 'error');
+    }
+  });
+
+  document.getElementById('btn-copy-key').addEventListener('click', () => {
+    const key = document.getElementById('created-key-value').textContent;
+    navigator.clipboard.writeText(key).then(() => toast('Key copied', 'success'));
+  });
+
+  async function loadKeys() {
+    const tbody = document.getElementById('keys-tbody');
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="8"><span class="spinner"></span></td></tr>';
+
+    try {
+      const res = await API.get('/admin/keys');
+      if (!res.ok) return;
+      const keys = await res.json();
+
+      if (keys.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted)">No API keys yet</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = keys.map(k => {
+        const statusBadge = k.active
+          ? '<span class="badge badge-green">Active</span>'
+          : '<span class="badge badge-red">Inactive</span>';
+        const actionBtn = k.active
+          ? '<button class="btn btn-red btn-sm" onclick="deactivateKey(' + k.id + ')">Revoke</button>'
+          : '';
+
+        return '<tr>' +
+          '<td>' + k.id + '</td>' +
+          '<td><code style="font-size:0.82rem">' + esc(k.key_prefix) + '</code></td>' +
+          '<td>' + esc(k.department) + '</td>' +
+          '<td>' + esc(k.description || '—') + '</td>' +
+          '<td>' + statusBadge + '</td>' +
+          '<td>' + fmtDate(k.created_at) + '</td>' +
+          '<td>' + fmtDate(k.last_used_at) + '</td>' +
+          '<td>' + actionBtn + '</td>' +
+          '</tr>';
+      }).join('');
+    } catch (err) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--red)">Failed to load keys</td></tr>';
+    }
+  }
+
+  window.deactivateKey = async function(id) {
+    if (!confirm('Revoke this API key? Staff using it will lose access immediately.')) return;
+    try {
+      const res = await API.del('/admin/keys/' + id);
+      if (res.ok) {
+        toast('Key revoked', 'success');
+        loadKeys();
+      } else {
+        const err = await res.json();
+        toast(err.detail || 'Failed to revoke key', 'error');
+      }
+    } catch (err) {
+      toast('Network error', 'error');
+    }
+  };
+
+  // ── ADMINISTRATORS ─────────────────────────────────────────────────────
+  document.getElementById('btn-new-admin').addEventListener('click', () => {
+    document.getElementById('new-admin-email').value = '';
+    document.getElementById('new-admin-password').value = '';
+    openModal('modal-new-admin');
+  });
+
+  document.getElementById('btn-create-admin').addEventListener('click', async () => {
+    const email = document.getElementById('new-admin-email').value.trim();
+    const password = document.getElementById('new-admin-password').value;
+    if (!email || !password) { toast('Email and password are required', 'error'); return; }
+
+    try {
+      const res = await API.post('/admin/admins', { email, password });
+      if (!res.ok) {
+        const err = await res.json();
+        toast(err.detail || 'Failed to create admin', 'error');
+        return;
+      }
+      closeModal('modal-new-admin');
+      toast('Administrator created', 'success');
+      loadAdmins();
+    } catch (err) {
+      toast('Network error', 'error');
+    }
+  });
+
+  async function loadAdmins() {
+    const tbody = document.getElementById('admins-tbody');
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="6"><span class="spinner"></span></td></tr>';
+
+    try {
+      const res = await API.get('/admin/admins');
+      if (!res.ok) return;
+      const admins = await res.json();
+
+      if (admins.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-muted)">No administrators</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = admins.map(a => {
+        const statusBadge = a.is_active
+          ? '<span class="badge badge-green">Active</span>'
+          : '<span class="badge badge-red">Inactive</span>';
+        const totpBadge = a.has_totp
+          ? '<span class="badge badge-green">Enabled</span>'
+          : '<span class="badge badge-navy">Not set</span>';
+
+        return '<tr>' +
+          '<td>' + a.id + '</td>' +
+          '<td>' + esc(a.email) + '</td>' +
+          '<td>' + statusBadge + '</td>' +
+          '<td>' + totpBadge + '</td>' +
+          '<td>' + fmtDate(a.created_at) + '</td>' +
+          '<td>' + fmtDate(a.last_login_at) + '</td>' +
+          '</tr>';
+      }).join('');
+    } catch (err) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--red)">Failed to load administrators</td></tr>';
+    }
+  }
+
+  // ── XSS prevention ─────────────────────────────────────────────────────
+  function esc(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  // ── Init ───────────────────────────────────────────────────────────────
+  showScreen('login');
+
+})();
+</script>
+</body>
+</html>

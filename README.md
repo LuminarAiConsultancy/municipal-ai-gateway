@@ -332,6 +332,139 @@ The gateway validates SINs using the Luhn checksum algorithm, the same method us
 
 ---
 
+## IT Deployment Guide
+
+The gateway audits and controls AI traffic that passes through it. To
+enforce its use across your municipality, your IT team must block direct
+access to external AI services and route all discretionary AI traffic
+through the gateway instead.
+
+### What the gateway governs (and what it does not)
+
+| Traffic type | Governed by gateway? |
+|---|---|
+| Staff using ChatGPT, Claude.ai, Gemini directly | Yes — block at firewall, route through gateway |
+| Departmental AI tools using OpenAI/Anthropic APIs | Yes — reconfigure to point at gateway URL |
+| Microsoft 365 Copilot | No — governed through your Microsoft tenant and data processing agreement |
+| GitHub Copilot | No — uses a separate authentication flow outside the gateway |
+
+Microsoft 365 Copilot is a licensed, contracted tool that operates
+entirely within your M365 tenant. It does not require gateway routing.
+The gateway addresses discretionary and ungoverned AI use — the tools
+staff are using outside your licensed agreements.
+
+---
+
+### On-network enforcement
+
+#### Step 1 — Block direct AI service access at the firewall
+
+Add outbound deny rules for the following domains on your perimeter
+firewall or DNS filtering appliance (Cisco Umbrella, Cloudflare Gateway,
+Palo Alto, pfSense, etc.):
+
+**OpenAI / ChatGPT**
+```
+api.openai.com
+chatgpt.com
+chat.openai.com
+```
+
+**Anthropic / Claude**
+```
+api.anthropic.com
+claude.ai
+```
+
+**Google Gemini**
+```
+generativelanguage.googleapis.com
+gemini.google.com
+aistudio.google.com
+```
+
+**Other common services**
+```
+api.cohere.com
+api.mistral.ai
+```
+
+#### Step 2 — Allow gateway outbound traffic only
+
+Permit outbound traffic from the gateway server to AI provider APIs.
+All other workstations should have those domains blocked. Staff
+workstations only need access to your gateway's internal or hosted
+address.
+
+#### Step 3 — Issue API keys to staff
+
+Each staff member or department receives a gateway-issued API key.
+Keys are individually scoped, logged, and revocable without affecting
+other users.
+
+---
+
+### Off-network enforcement (remote and hybrid staff)
+
+Firewall rules only apply on the municipal network. Staff working from
+home or on personal hotspots bypass on-network controls. Choose one or
+more of the following approaches:
+
+#### Option A — Split-tunnel VPN (recommended for most municipalities)
+
+Configure your VPN client to route AI service domains back through the
+municipal network when staff are off-site. If your staff already VPN in
+for remote work, enforcement extends automatically — no additional
+tooling required.
+
+Domains to include in your VPN split-tunnel policy are the same as the
+firewall block list above.
+
+#### Option B — Device-level DNS filtering
+
+Deploy a DNS filtering agent directly to managed devices via MDM
+(Microsoft Intune, Jamf, Mosyle). Tools like Cloudflare Gateway for
+Teams or Cisco Umbrella Roaming Client enforce block rules regardless
+of network — home wifi, personal hotspot, or coffee shop.
+
+This is the strongest enforcement option and follows the device
+everywhere.
+
+#### Option C — Browser policy via Intune or Group Policy
+
+Push URL block policies to managed browsers (Edge, Chrome) via
+Microsoft Intune or Group Policy. Device-level enforcement that does
+not require DNS filtering infrastructure.
+
+> **Note:** Options B and C require managed devices enrolled in your
+> MDM. Personally-owned devices used for work (BYOD) cannot be
+> enforced at the device level without explicit MDM enrollment.
+
+---
+
+### What the gateway logs
+
+Every request passing through the gateway is logged with:
+
+- Timestamp
+- Staff member (identified by API key)
+- AI provider and model requested
+- Token count (input and output)
+- PII detection events (detection only — no content is stored)
+- Response status and latency
+
+Logs are stored in PostgreSQL. Retention period is configurable to
+match your municipality's records retention schedule.
+
+---
+
+### Deployment assistance
+
+Contact joy@luminaryx.ca for deployment support, firewall rule
+templates, or Intune configuration guidance.
+
+---
+
 ## Ready for full AI governance?
 
 The gateway handles the **technical layer**: what staff are sending and what PII was detected.
