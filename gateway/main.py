@@ -6,6 +6,7 @@ logs every request to PostgreSQL, and returns the response.
 
 import json
 import os
+import pathlib
 import hashlib
 import datetime as dt
 from contextlib import asynccontextmanager
@@ -14,6 +15,8 @@ import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, create_engine
 from sqlalchemy.orm import Session
 
@@ -21,6 +24,11 @@ from models import Base
 from scrubber import get_scrubber
 from auth import ApiKey, authenticate, generate_key
 from costs import extract_usage, estimate_cost
+from provincial_frameworks import (
+    get_active_framework,
+    list_frameworks,
+    framework_to_dict,
+)
 from policies import (
     DepartmentPolicy,
     check_rate_limit,
@@ -267,6 +275,20 @@ app.add_middleware(
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/frameworks")
+async def frameworks():
+    """Return the active provincial privacy framework and all available frameworks.
+
+    The active framework is determined by the PROVINCE environment variable.
+    If no province is set, the active framework is null.
+    """
+    active = get_active_framework()
+    return {
+        "active": framework_to_dict(active) if active else None,
+        "available": list_frameworks(),
+    }
 
 
 @app.get("/audit/verify")
@@ -689,3 +711,23 @@ async def get_policy(department: str, request: Request):
         "allowed_models": json.loads(policy.allowed_models) if policy.allowed_models else None,
         "monthly_cost_limit_cents": policy.monthly_cost_limit_cents,
     }
+
+
+# ── Dashboard serving ────────────────────────────────────────────────────────
+
+_dashboard_dir = pathlib.Path(__file__).parent / "dashboard"
+
+
+@app.get("/dashboard")
+async def serve_dashboard():
+    """Serve the admin dashboard HTML page."""
+    index_file = _dashboard_dir / "index.html"
+    if not index_file.exists():
+        raise HTTPException(status_code=404, detail="Dashboard not found.")
+    return FileResponse(str(index_file), media_type="text/html")
+
+
+# Mount dashboard static assets (logo, etc.) if the directory exists.
+_assets_dir = _dashboard_dir / "assets"
+if _assets_dir.exists():
+    app.mount("/dashboard/assets", StaticFiles(directory=str(_assets_dir)), name="dashboard-assets")

@@ -1,9 +1,22 @@
 services:
+  nginx:
+    build: ./nginx
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - certs:/etc/nginx/ssl
+    depends_on:
+      - gateway
+    restart: unless-stopped
+
   gateway:
     build: ./gateway
     ports:
       - "${GATEWAY_PORT:-8080}:8080"
     env_file: .env
+    volumes:
+      - ./dashboard:/app/dashboard:ro
     depends_on:
       db:
         condition: service_healthy
@@ -26,3 +39,4 @@ services:
 
 volumes:
   pgdata:
+  certs:

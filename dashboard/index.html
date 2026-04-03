@@ -3,17 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Municipal AI Gateway — Admin Dashboard</title>
+<title>Municipal AI Gateway - Admin Dashboard</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.7/chart.umd.min.js"></script>
 <style>
   :root {
-    --navy: #1B2A4A;
-    --navy-light: #2C3E6B;
-    --gold: #C8A951;
-    --gold-light: #E8D599;
+    --navy: #1a2744;
+    --navy-light: #2c3e5f;
+    --gold: #c9a84c;
+    --gold-light: #e8d494;
     --bg: #F4F5F7;
     --card: #FFFFFF;
-    --text: #1B2A4A;
+    --text: #1a2744;
     --text-muted: #6B7280;
     --border: #E5E7EB;
     --green: #059669;
@@ -30,7 +30,7 @@
     line-height: 1.5;
   }
 
-  /* ── Header ─────────────────────────────────── */
+  /* Header */
   header {
     background: var(--navy);
     color: white;
@@ -49,7 +49,7 @@
   .header-status { font-size: 0.85rem; color: var(--gold-light); }
   .gold-bar { height: 4px; background: linear-gradient(90deg, var(--gold), var(--gold-light), var(--gold)); }
 
-  /* ── Login overlay ──────────────────────────── */
+  /* Login overlay */
   #login-overlay {
     position: fixed; inset: 0;
     background: var(--navy);
@@ -73,10 +73,10 @@
   }
   .login-box input:focus { outline: none; border-color: var(--gold); }
 
-  /* ── Layout ─────────────────────────────────── */
+  /* Layout */
   .container { max-width: 1400px; margin: 0 auto; padding: 1.5rem 2rem; }
 
-  /* ── Buttons ────────────────────────────────── */
+  /* Buttons */
   .btn {
     display: inline-block;
     padding: 0.6rem 1.2rem;
@@ -89,7 +89,7 @@
   .btn-gold { background: var(--gold); color: var(--navy); }
   .btn-sm { padding: 0.4rem 0.8rem; font-size: 0.8rem; }
 
-  /* ── Stats row ──────────────────────────────── */
+  /* Stats row */
   .stats-row {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -109,7 +109,7 @@
   .stat-card.ok .value { color: var(--green); }
   .stat-card.tampered .value { color: var(--red); }
 
-  /* ── Panels ─────────────────────────────────── */
+  /* Panels */
   .panel {
     background: var(--card);
     border-radius: 8px;
@@ -125,7 +125,7 @@
   .panel-header h2 { font-size: 1rem; font-weight: 600; }
   .panel-body { padding: 1.5rem; }
 
-  /* ── Table ──────────────────────────────────── */
+  /* Table */
   table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
   th { text-align: left; padding: 0.6rem 1rem; color: var(--text-muted); font-weight: 500; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 2px solid var(--border); }
   td { padding: 0.65rem 1rem; border-bottom: 1px solid var(--border); }
@@ -152,7 +152,7 @@
     font-size: 0.7rem;
   }
 
-  /* ── Two-column layout ──────────────────────── */
+  /* Two-column layout */
   .grid-2 {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -160,15 +160,21 @@
   }
   @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
 
-  /* ── Quick actions ──────────────────────────── */
+  /* Quick actions */
   .action-group { margin-bottom: 1.25rem; }
   .action-group label { display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.04em; }
-  .action-group input {
+  .action-group input, .action-group select {
     width: 100%; padding: 0.6rem 0.8rem;
     border: 1px solid var(--border); border-radius: 6px;
     font-size: 0.85rem; margin-bottom: 0.5rem;
   }
-  .action-group input:focus { outline: none; border-color: var(--gold); }
+  .action-group input:focus, .action-group select:focus { outline: none; border-color: var(--gold); }
+
+  .input-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
 
   .result-box {
     background: #F0FDF4;
@@ -186,10 +192,10 @@
 
   .empty-state { text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.9rem; }
 
-  /* ── Chart ──────────────────────────────────── */
+  /* Chart */
   .chart-wrap { position: relative; height: 280px; }
 
-  /* ── Footer ─────────────────────────────────── */
+  /* Footer */
   .site-footer {
     text-align: center;
     padding: 1.5rem 2rem;
@@ -206,64 +212,61 @@
 </head>
 <body>
 
-<!-- ── Login ────────────────────────────────────── -->
+<!-- Login -->
 <div id="login-overlay">
   <div class="login-box">
-    <div style="margin-bottom:1rem;text-align:center">
-      <img src="assets/logo.png" alt="LUMINARYX" style="height: 32px;">
-    </div>
     <h2>Municipal AI Gateway</h2>
     <p>Enter your gateway URL and admin secret to continue.</p>
-    <input type="text" id="login-url" placeholder="Gateway URL (e.g. http://localhost:8080)" value="http://localhost:8080">
+    <input type="text" id="login-url" placeholder="Gateway URL (e.g. https://localhost)">
     <input type="password" id="login-secret" placeholder="Admin secret (GATEWAY_SECRET)">
     <button class="btn btn-navy" style="width:100%" onclick="doLogin()">Connect</button>
     <div id="login-error" class="result-box error" style="margin-top:1rem"></div>
   </div>
   <div style="position:absolute;bottom:1.5rem;width:100%;text-align:center;font-size:0.8rem;color:rgba(255,255,255,0.5)">
-    Powered by <a href="https://luminaryx.ca" target="_blank" rel="noopener" style="color:var(--gold-light);text-decoration:none">LUMINARYX</a>
+    Powered by <a href="https://luminaryx.ca" target="_blank" rel="noopener" style="color:var(--gold-light);text-decoration:none">LUMINARYX&#8482;</a>
   </div>
 </div>
 
-<!-- ── Header ───────────────────────────────────── -->
+<!-- Header -->
 <header>
   <div class="header-main">
     <h1><span>Municipal</span> AI Gateway</h1>
     <div style="display:flex;align-items:center;gap:1rem">
-      <span class="header-status">Admin Dashboard &mdash; <span id="header-time"></span></span>
-      <button class="btn btn-sm" style="background:rgba(255,255,255,0.15);color:var(--gold-light);border:1px solid rgba(200,169,81,0.3)" onclick="doLogout()">Log out</button>
+      <span class="header-status">Admin Dashboard &bull; <span id="header-time"></span></span>
+      <button class="btn btn-sm" style="background:rgba(255,255,255,0.15);color:var(--gold-light);border:1px solid rgba(201,168,76,0.3)" onclick="doLogout()">Log out</button>
     </div>
   </div>
   <div class="gold-bar"></div>
 </header>
 
-<!-- ── Main content ─────────────────────────────── -->
+<!-- Main content -->
 <div class="container">
 
   <!-- Stats row -->
   <div class="stats-row">
     <div class="stat-card">
       <div class="label">Requests Today</div>
-      <div class="value" id="stat-requests">—</div>
+      <div class="value" id="stat-requests">&mdash;</div>
       <div class="sub" id="stat-requests-sub">loading...</div>
     </div>
     <div class="stat-card">
       <div class="label">PII Detections Prevented</div>
-      <div class="value" id="stat-pii">—</div>
+      <div class="value" id="stat-pii">&mdash;</div>
       <div class="sub" id="stat-pii-sub">today</div>
     </div>
     <div class="stat-card">
       <div class="label">Active Staff Keys</div>
-      <div class="value" id="stat-keys">—</div>
+      <div class="value" id="stat-keys">&mdash;</div>
       <div class="sub" id="stat-keys-sub">loading...</div>
     </div>
     <div class="stat-card">
       <div class="label">Monthly Spend</div>
-      <div class="value" id="stat-spend">—</div>
+      <div class="value" id="stat-spend">&mdash;</div>
       <div class="sub" id="stat-spend-sub">this month</div>
     </div>
     <div class="stat-card" id="stat-chain-card">
       <div class="label">Audit Chain</div>
-      <div class="value" id="stat-chain">—</div>
+      <div class="value" id="stat-chain">&mdash;</div>
       <div class="sub" id="stat-chain-sub">verifying...</div>
     </div>
   </div>
@@ -322,6 +325,31 @@
     </div>
   </div>
 
+  <!-- Department Policies -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Department Policies</h2>
+      <button class="btn btn-sm btn-navy" onclick="loadPolicies()">Refresh</button>
+    </div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Department</th>
+            <th>Requests/min (Key)</th>
+            <th>Requests/min (Dept)</th>
+            <th>Allowed Models</th>
+            <th>Monthly Budget</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="policies-tbody">
+          <tr><td colspan="6" class="empty-state">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- Charts -->
   <div class="grid-2">
     <div class="panel">
@@ -373,12 +401,32 @@
         </div>
       </div>
     </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <h2>Department Policy Management</h2>
+      </div>
+      <div class="panel-body">
+        <div class="action-group">
+          <label>Create or Update Department Policy</label>
+          <input type="text" id="policy-dept" placeholder="Department name (e.g. Planning)">
+          <div class="input-row">
+            <input type="number" id="policy-rpm-key" placeholder="Requests/min per key" value="60" min="1">
+            <input type="number" id="policy-rpm-dept" placeholder="Requests/min department" value="200" min="1">
+          </div>
+          <input type="text" id="policy-models" placeholder="Allowed models (comma-separated, leave empty for all)">
+          <input type="number" id="policy-budget" placeholder="Monthly budget cap in dollars (leave empty for unlimited)" min="0" step="0.01">
+          <button class="btn btn-gold" onclick="savePolicy()">Save Policy</button>
+          <div id="policy-result" class="result-box"></div>
+        </div>
+      </div>
+    </div>
   </div>
 
 </div>
 
 <footer class="site-footer">
-  Powered by <a href="https://luminaryx.ca" target="_blank" rel="noopener">LUMINARYX</a>
+  Powered by <a href="https://luminaryx.ca" target="_blank" rel="noopener">LUMINARYX&#8482;</a>
 </footer>
 
 <script>
@@ -390,6 +438,16 @@ let spendChart = null;
 function headers() {
   return { 'Authorization': 'Bearer ' + API_SECRET, 'Content-Type': 'application/json' };
 }
+
+// Auto-detect gateway URL when served from the gateway itself
+(function() {
+  const el = document.getElementById('login-url');
+  if (window.location.protocol !== 'file:') {
+    el.value = window.location.origin;
+  } else {
+    el.value = 'https://localhost';
+  }
+})();
 
 function doLogout() {
   API_URL = '';
@@ -426,6 +484,7 @@ async function doLogin() {
 function loadAll() {
   loadRequests();
   loadKeys();
+  loadPolicies();
   loadChainStatus();
   updateClock();
   setInterval(updateClock, 1000);
@@ -495,7 +554,7 @@ function formatPiiType(t) {
 
 function computeStats(data) {
   const today = todayISO();
-  const thisMonth = today.slice(0, 7); // YYYY-MM
+  const thisMonth = today.slice(0, 7);
   const todayReqs = data.filter(r => r.timestamp && r.timestamp.startsWith(today));
   const monthReqs = data.filter(r => r.timestamp && r.timestamp.startsWith(thisMonth));
   const totalPii = todayReqs.reduce((s, r) => s + (r.pii_detections_request || 0) + (r.pii_detections_response || 0), 0);
@@ -522,9 +581,7 @@ function computePiiChart(data) {
     }
   });
 
-  // Always show these categories even if zero
   const categories = ['SIN', 'BC PHN', 'Address', 'Email', 'Phone', 'Postal', 'PID', 'Folio', 'Case #', 'Name'];
-  const labels = categories;
   const values = categories.map(c => counts[c] || 0);
 
   const ctx = document.getElementById('pii-chart').getContext('2d');
@@ -532,11 +589,11 @@ function computePiiChart(data) {
   piiChart = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: labels,
+      labels: categories,
       datasets: [{
         label: 'Detections',
         data: values,
-        backgroundColor: '#1B2A4A',
+        backgroundColor: '#1a2744',
         borderRadius: 4,
         maxBarThickness: 40,
       }]
@@ -544,9 +601,7 @@ function computePiiChart(data) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-      },
+      plugins: { legend: { display: false } },
       scales: {
         y: { beginAtZero: true, ticks: { precision: 0 } },
         x: { grid: { display: false } }
@@ -568,7 +623,7 @@ function computeSpendChart(data) {
   });
 
   const labels = Object.keys(deptCosts).sort();
-  const values = labels.map(d => deptCosts[d] / 100); // dollars
+  const values = labels.map(d => deptCosts[d] / 100);
 
   const ctx = document.getElementById('spend-chart').getContext('2d');
   if (spendChart) spendChart.destroy();
@@ -581,7 +636,7 @@ function computeSpendChart(data) {
     return;
   }
 
-  const colors = ['#1B2A4A', '#C8A951', '#2C3E6B', '#E8D599', '#059669', '#D97706', '#DC2626'];
+  const colors = ['#1a2744', '#c9a84c', '#2c3e5f', '#e8d494', '#059669', '#D97706', '#DC2626'];
   spendChart = new Chart(ctx, {
     type: 'doughnut',
     data: {
@@ -697,6 +752,119 @@ async function createKey() {
       loadKeys();
     } else {
       resultEl.textContent = data.detail || 'Error creating key';
+      resultEl.classList.add('visible', 'error');
+    }
+  } catch (e) {
+    resultEl.textContent = 'Network error: ' + e.message;
+    resultEl.classList.add('visible', 'error');
+  }
+}
+
+// ── Policies ──────────────────────────────────────
+
+async function loadPolicies() {
+  try {
+    const r = await fetch(API_URL + '/admin/policies', { headers: headers() });
+    const data = await r.json();
+    renderPoliciesTable(data);
+  } catch (e) {
+    document.getElementById('policies-tbody').innerHTML =
+      '<tr><td colspan="6" class="empty-state">Error loading policies</td></tr>';
+  }
+}
+
+function renderPoliciesTable(data) {
+  const tbody = document.getElementById('policies-tbody');
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No policies configured. All departments use default settings (60 requests/min per key, 200/min per department, all models allowed, no budget cap).</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map(p => {
+    const models = p.allowed_models && p.allowed_models.length
+      ? '<div class="pii-tags">' + p.allowed_models.map(m => '<span class="pii-tag">' + m + '</span>').join('') + '</div>'
+      : '<span style="color:var(--text-muted);font-size:0.8rem">All allowed</span>';
+    const budget = p.monthly_cost_limit_cents
+      ? '$' + (p.monthly_cost_limit_cents / 100).toFixed(2)
+      : '<span style="color:var(--text-muted)">Unlimited</span>';
+    const modelsStr = p.allowed_models ? p.allowed_models.join(',') : '';
+    return '<tr>'
+      + '<td><strong>' + escHtml(p.department) + '</strong></td>'
+      + '<td>' + (p.requests_per_minute_per_key || 60) + '</td>'
+      + '<td>' + (p.requests_per_minute_department || 200) + '</td>'
+      + '<td>' + models + '</td>'
+      + '<td>' + budget + '</td>'
+      + '<td><button class="btn btn-sm btn-navy" onclick="editPolicy(this)" '
+      + 'data-dept="' + escAttr(p.department) + '" '
+      + 'data-rpm-key="' + (p.requests_per_minute_per_key || 60) + '" '
+      + 'data-rpm-dept="' + (p.requests_per_minute_department || 200) + '" '
+      + 'data-models="' + escAttr(modelsStr) + '" '
+      + 'data-budget="' + (p.monthly_cost_limit_cents || 0) + '"'
+      + '>Edit</button></td>'
+      + '</tr>';
+  }).join('');
+}
+
+function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function escAttr(s) { return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;'); }
+
+function editPolicy(btn) {
+  document.getElementById('policy-dept').value = btn.dataset.dept;
+  document.getElementById('policy-rpm-key').value = btn.dataset.rpmKey;
+  document.getElementById('policy-rpm-dept').value = btn.dataset.rpmDept;
+  document.getElementById('policy-models').value = btn.dataset.models;
+  const budgetCents = parseInt(btn.dataset.budget) || 0;
+  document.getElementById('policy-budget').value = budgetCents > 0 ? (budgetCents / 100) : '';
+  document.getElementById('policy-dept').scrollIntoView({ behavior: 'smooth' });
+}
+
+async function savePolicy() {
+  const dept = document.getElementById('policy-dept').value.trim();
+  const resultEl = document.getElementById('policy-result');
+  resultEl.classList.remove('visible', 'error');
+
+  if (!dept) {
+    resultEl.textContent = 'Department name is required.';
+    resultEl.classList.add('visible', 'error');
+    return;
+  }
+
+  const body = {
+    department: dept,
+    requests_per_minute_per_key: parseInt(document.getElementById('policy-rpm-key').value) || 60,
+    requests_per_minute_department: parseInt(document.getElementById('policy-rpm-dept').value) || 200,
+  };
+
+  const modelsVal = document.getElementById('policy-models').value.trim();
+  if (modelsVal) {
+    body.allowed_models = modelsVal.split(',').map(m => m.trim()).filter(Boolean);
+  } else {
+    body.allowed_models = [];
+  }
+
+  const budgetVal = document.getElementById('policy-budget').value.trim();
+  if (budgetVal && parseFloat(budgetVal) > 0) {
+    body.monthly_cost_limit_cents = Math.round(parseFloat(budgetVal) * 100);
+  }
+
+  try {
+    const r = await fetch(API_URL + '/admin/policies', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify(body),
+    });
+    const data = await r.json();
+    if (r.ok) {
+      resultEl.textContent = 'Policy saved for ' + dept + '.';
+      resultEl.classList.add('visible');
+      resultEl.classList.remove('error');
+      document.getElementById('policy-dept').value = '';
+      document.getElementById('policy-models').value = '';
+      document.getElementById('policy-budget').value = '';
+      document.getElementById('policy-rpm-key').value = '60';
+      document.getElementById('policy-rpm-dept').value = '200';
+      loadPolicies();
+    } else {
+      resultEl.textContent = data.detail || 'Error saving policy';
       resultEl.classList.add('visible', 'error');
     }
   } catch (e) {
