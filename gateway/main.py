@@ -464,7 +464,7 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    response.headers["Content-Security-Policy"] = "default-src 'self'"
+    response.headers["Content-Security-Policy"] = "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
     return response
@@ -1659,6 +1659,11 @@ async def serve_legacy_dashboard():
         raise HTTPException(status_code=404, detail="Dashboard not found.")
     return FileResponse(str(index_file), media_type="text/html")
 
+
+# Mount admin static assets (fonts, etc.).
+_admin_assets_dir = _admin_dir
+if _admin_assets_dir.exists():
+    app.mount("/admin/static", StaticFiles(directory=str(_admin_assets_dir)), name="admin-assets")
 
 # Mount dashboard static assets (logo, etc.) if the directory exists.
 _assets_dir = _dashboard_dir / "assets"
