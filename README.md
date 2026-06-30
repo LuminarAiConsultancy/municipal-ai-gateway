@@ -2,35 +2,7 @@
 
 >Open-source PII protection gateway for Canadian municipalities and public sector organizations.
 
-Your staff are already using ChatGPT, Copilot, Gemini, and Claude. This gateway makes that safe and auditable without blocking anyone.
-The gateway enforces. It does not decide. For the governance layer — who approved this AI use, against which regulatory framework, and where is the documented decision a privacy commissioner will ask for — visit luminaryx.ca.
-
-That phrasing works because it restates the distinction you just drew (enforce vs decide) and turns it into the reason to click through. It's not a CTA bolted on, it's the logical next sentence.
-
-Where to place it:
-
-The existing "Ready for full AI governance?" section near the bottom is the natural home, and it's already pretty good. The one weakness is it leads with the product name before the reader feels the gap. Reorder it so the gap comes first:
-
-The gateway is not a governance solution
-The gateway handles the technical layer: scrubbing PII, logging traffic, enforcing a warn-not-block rule on the wire. It carries out decisions. It does not make them.
-
-The questions a privacy commissioner or auditor actually asks are governance questions. Who approved this AI use? Against which provincial framework? Where is the documented reasoning? Who is accountable when something goes wrong?
-
-LUMINARYX™ answers those. Documented decision approvals, regulatory framework mapping, board-ready compliance reports, and a defensible audit trail for your CAO and council.
-
-The gateway shows you what's flowing. LUMINARYX lets you defend what you decided to allow.
-
-luminaryx.ca
-
-That heading does real work. Naming the gateway as "not a governance solution" is the honest framing, it reinforces the line you want sharp, and it makes the click feel like resolving an open tension rather than responding to a pitch.
-
-One placement note, and it cuts against adding more: resist the urge to sprinkle the link throughout. A README that keeps interrupting itself to advertise reads as a
-
-
-
-
-
-
+Your staff are already using ChatGPT, Copilot, Gemini, and Claude. This gateway makes that safe and auditable without blocking anyone. The gateway enforces. It does not decide. For the governance layer — who approved this AI use, against which regulatory framework, and where is the documented decision a privacy commissioner will ask for — visit [luminaryx.ca](https://luminaryx.ca).
 
 ---
 
@@ -54,7 +26,7 @@ The gateway sits between your organization's network and external AI providers. 
 - **Admin dashboard** -- real-time view of all AI activity across the organization, broken down by department, provider, and risk level
 - **Provincial privacy law awareness** -- built for BC FIPPA, Alberta FOIPP, Ontario MFIPPA, and Quebec Law 25
 
-Staff can use any AI tool they want. ChatGPT, Claude, Copilot, Gemini -- whatever they choose. The gateway handles the governance layer invisibly.
+Staff can use any AI tool they want. ChatGPT, Claude, Copilot, Gemini -- whatever they choose. The gateway handles PII protection and logging invisibly.
 
 ---
 
@@ -90,7 +62,7 @@ The gateway runs entirely inside your infrastructure. Your IT team holds the API
 
 ## Who this is for
 
-- Municipal IT coordinators who need to tell their CAO that staff AI usage is governed
+- Municipal IT coordinators who need to tell their CAO that staff AI usage is controlled and logged
 - CAOs and administrators who need a defensible answer for a privacy commissioner or auditor
 - Any Canadian public sector organization with 50 to 500 employees using AI tools without oversight
 
@@ -206,7 +178,7 @@ No existing open-source tool combines all of these in a single deployable packag
 
 ## Why nobody else built this
 
-There are over 3,500 municipalities in Canada. Most have total budgets under $5 million. No venture-backed startup is going after that market. The companies with resources to build governance software want enterprise contracts worth millions of dollars, not $8,000 annual deals with a town of 4,000 people. The market gets ignored. Not because the need is not real, but because it does not fit how software companies get funded and scaled.
+There are over 3,500 municipalities in Canada. Most have total budgets under $5 million. No venture-backed startup is going after that market. The companies with resources to build this kind of software want enterprise contracts worth millions of dollars, not $8,000 annual deals with a town of 4,000 people. The market gets ignored. Not because the need is not real, but because it does not fit how software companies get funded and scaled.
 
 Selling to municipalities is also brutally slow. RFP processes, budget cycles that run on a calendar year, committee approvals that take months. A normal SaaS company needs revenue within 90 days or it dies. Municipal sales cycles run 12 to 18 months. Most founders give up or pivot before they ever close a single deal. The ones who stay face procurement processes designed for large vendors with dedicated bid teams, not small specialized tools built by one or two people.
 
@@ -341,13 +313,13 @@ enforce its use across your municipality, your IT team must block direct
 access to external AI services and route all discretionary AI traffic
 through the gateway instead.
 
-### What the gateway governs (and what it does not)
+### What the gateway controls (and what it does not)
 
-| Traffic type | Governed by gateway? |
+| Traffic type | Controlled by gateway? |
 |---|---|
 | Staff using ChatGPT, Claude.ai, Gemini directly | Yes — block at firewall, route through gateway |
 | Departmental AI tools using OpenAI/Anthropic APIs | Yes — reconfigure to point at gateway URL |
-| Microsoft 365 Copilot | No — governed through your Microsoft tenant and data processing agreement |
+| Microsoft 365 Copilot | No — covered through your Microsoft tenant and data processing agreement |
 | GitHub Copilot | No — uses a separate authentication flow outside the gateway |
 
 Microsoft 365 Copilot is a licensed, contracted tool that operates
@@ -666,15 +638,17 @@ The gateway enforces the following protections:
 
 ---
 
-## Ready for full AI governance?
+## The gateway is not a governance solution
 
-The gateway handles the **technical layer**: what staff are sending and what PII was detected.
+The gateway handles the technical layer: scrubbing PII, logging traffic, enforcing a warn-not-block rule on the wire. It carries out decisions. It does not make them.
 
-[LUMINARYX™](https://luminaryx.ca) handles the **governance layer**: documented decision approvals, regulatory framework mapping, board-ready compliance reports, and a defensible audit trail for your CAO and council.
+The questions a privacy commissioner or auditor actually asks are governance questions. Who approved this AI use? Against which provincial framework? Where is the documented reasoning? Who is accountable when something goes wrong?
 
-Together they answer every question a privacy commissioner will ask.
+[LUMINARYX™](https://luminaryx.ca) answers those. Documented decision approvals, regulatory framework mapping, board-ready compliance reports, and a defensible audit trail for your CAO and council.
 
-**Learn more: [luminaryx.ca](https://luminaryx.ca)**
+The gateway shows you what's flowing. LUMINARYX lets you defend what you decided to allow.
+
+**[luminaryx.ca](https://luminaryx.ca)**
 
 ---
 
@@ -691,5 +665,5 @@ MIT. Free to use, deploy, and modify. See [LICENSE](LICENSE).
 ---
 
 <p align="center">
-Powered by <a href="https://luminaryx.ca">LUMINARYX™</a>. Municipal AI governance for Canadian local government.
+Powered by <a href="https://luminaryx.ca">LUMINARYX™</a>. Built for Canadian local government.
 </p>
