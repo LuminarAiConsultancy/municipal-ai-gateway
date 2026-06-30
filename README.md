@@ -3,6 +3,34 @@
 >Open-source PII protection gateway for Canadian municipalities and public sector organizations.
 
 Your staff are already using ChatGPT, Copilot, Gemini, and Claude. This gateway makes that safe and auditable without blocking anyone.
+The gateway enforces. It does not decide. For the governance layer — who approved this AI use, against which regulatory framework, and where is the documented decision a privacy commissioner will ask for — visit luminaryx.ca.
+
+That phrasing works because it restates the distinction you just drew (enforce vs decide) and turns it into the reason to click through. It's not a CTA bolted on, it's the logical next sentence.
+
+Where to place it:
+
+The existing "Ready for full AI governance?" section near the bottom is the natural home, and it's already pretty good. The one weakness is it leads with the product name before the reader feels the gap. Reorder it so the gap comes first:
+
+The gateway is not a governance solution
+The gateway handles the technical layer: scrubbing PII, logging traffic, enforcing a warn-not-block rule on the wire. It carries out decisions. It does not make them.
+
+The questions a privacy commissioner or auditor actually asks are governance questions. Who approved this AI use? Against which provincial framework? Where is the documented reasoning? Who is accountable when something goes wrong?
+
+LUMINARYX™ answers those. Documented decision approvals, regulatory framework mapping, board-ready compliance reports, and a defensible audit trail for your CAO and council.
+
+The gateway shows you what's flowing. LUMINARYX lets you defend what you decided to allow.
+
+luminaryx.ca
+
+That heading does real work. Naming the gateway as "not a governance solution" is the honest framing, it reinforces the line you want sharp, and it makes the click feel like resolving an open tension rather than responding to a pitch.
+
+One placement note, and it cuts against adding more: resist the urge to sprinkle the link throughout. A README that keeps interrupting itself to advertise reads as a
+
+
+
+
+
+
 
 ---
 
