@@ -1,6 +1,6 @@
 # Canadian Municipal AI Gateway
 
-> Open-source AI governance proxy gateway for Canadian municipalities and public sector organizations.
+>Open-source PII protection gateway for Canadian municipalities and public sector organizations.
 
 Your staff are already using ChatGPT, Copilot, Gemini, and Claude. This gateway makes that safe and auditable without blocking anyone.
 
